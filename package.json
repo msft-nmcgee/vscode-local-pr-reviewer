@@ -305,6 +305,7 @@
   },
   "scripts": {
     "compile": "tsc -p ./",
+    "test": "npm run compile && node --test out/git/diffParser.test.js",
     "watch": "tsc -watch -p ./",
     "lint": "eslint src --ext ts"
   },

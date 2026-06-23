@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import * as cp from 'child_process';
-import { FileChange, FileChangeStatus, GitApi, GitRepository, CommitInfo } from '../types';
+import { FileChange, FileChangeStatus, GitApi, GitRepository, CommitInfo, DiffHunk } from '../types';
+import { parseDiffHunks } from './diffParser';
 
 export class GitService {
     private repo: GitRepository | undefined;
@@ -105,7 +106,7 @@ export class GitService {
     }
 
     async getCommitHash(branch: string): Promise<string> {
-        return this.execGit(`rev-parse ${branch}`);
+        return this.execGitArgs(['rev-parse', branch]);
     }
 
     async isCurrentBranch(branch: string): Promise<boolean> {
@@ -147,6 +148,26 @@ export class GitService {
         });
     }
 
+    async getDiffHunks(source: string, target: string): Promise<DiffHunk[]> {
+        const isWorkingTree = await this.isCurrentBranch(target);
+        const args = isWorkingTree
+            ? ['diff', '--no-ext-diff', '--find-renames', '--unified=3', source]
+            : ['diff', '--no-ext-diff', '--find-renames', '--unified=3', `${source}...${target}`];
+        const [sourceCommit, targetCommit] = await Promise.all([
+            this.getCommitHash(source),
+            this.getCommitHash(target),
+        ]);
+        const output = await this.execGitArgs(args);
+        return parseDiffHunks(output).map(hunk => ({
+            ...hunk,
+            sourceRef: source,
+            targetRef: target,
+            sourceCommit: sourceCommit.trim(),
+            targetCommit: targetCommit.trim(),
+            comparesWorkingTree: isWorkingTree,
+        }));
+    }
+
     getFileUri(ref: string, filePath: string): vscode.Uri {
         // Use git show to create a URI for the file at a specific ref
         return vscode.Uri.parse(
@@ -184,6 +205,23 @@ export class GitService {
             cp.exec(
                 `git ${args}`,
                 { cwd: this.workspaceRoot, maxBuffer: 10 * 1024 * 1024 },
+                (error, stdout, stderr) => {
+                    if (error) {
+                        reject(new Error(stderr || error.message));
+                    } else {
+                        resolve(stdout);
+                    }
+                }
+            );
+        });
+    }
+
+    private execGitArgs(args: string[]): Promise<string> {
+        return new Promise((resolve, reject) => {
+            cp.execFile(
+                'git',
+                args,
+                { cwd: this.workspaceRoot, maxBuffer: 10 * 1024 * 1024, timeout: 30000 },
                 (error, stdout, stderr) => {
                     if (error) {
                         reject(new Error(stderr || error.message));

@@ -7,6 +7,11 @@ export interface LocalPr {
     sourceCommit: string;
     targetCommit: string;
     createdAt: string;
+    hunkReviews?: ReviewHunkRecord[];
+    /**
+     * Legacy file-level state retained until the changed-files UI is migrated to
+     * hunk-level review records.
+     */
     reviewedFiles?: string[];
 }
 
@@ -17,6 +22,51 @@ export interface FileChange {
 }
 
 export type FileChangeStatus = 'added' | 'modified' | 'deleted' | 'renamed';
+
+export type ReviewDecision = 'pending' | 'approved' | 'question' | 'disputed' | 'stale' | 'resolved';
+
+export interface DiffRange {
+    start: number;
+    count: number;
+}
+
+export interface ReviewHunkRecord {
+    hunkId: string;
+    filePath: string;
+    oldFilePath?: string;
+    status: FileChangeStatus;
+    oldRange: DiffRange;
+    newRange: DiffRange;
+    patchHash: string;
+    baselineCommit: string;
+    targetCommit: string;
+    contextBefore?: string;
+    contextAfter?: string;
+    decision: ReviewDecision;
+    comments: ReviewComment[];
+    createdAt: string;
+    updatedAt: string;
+    reviewedAt?: string;
+    resolvedAt?: string | null;
+}
+
+export interface DiffHunk {
+    hunkId: string;
+    filePath: string;
+    oldFilePath?: string;
+    status: FileChangeStatus;
+    oldRange: DiffRange;
+    newRange: DiffRange;
+    patchHash: string;
+    patch: string;
+    contextBefore?: string;
+    contextAfter?: string;
+    sourceRef?: string;
+    targetRef?: string;
+    sourceCommit?: string;
+    targetCommit?: string;
+    comparesWorkingTree?: boolean;
+}
 
 export interface ReviewThread {
     id: string;
