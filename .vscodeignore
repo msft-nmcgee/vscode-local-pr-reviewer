@@ -5,6 +5,6 @@ docs/**
 node_modules/**
 tsconfig.json
 .eslintrc*
-*.map
+**/*.map
+**/*.test.*
 **/*.ts
-!out/**

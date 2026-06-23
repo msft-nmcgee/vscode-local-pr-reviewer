@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as crypto from 'crypto';
-import { LocalPr, LocalPrRegistry } from '../types';
+import { LocalPr, LocalPrRegistry, ReviewDecision, ReviewHunkRecord } from '../types';
 import { GitService } from '../git/gitService';
 
 export class LocalPrManager {
@@ -116,6 +116,48 @@ export class LocalPrManager {
         return path.join(this.getReviewDir(review), 'comments.json');
     }
 
+    getHunkReviews(): ReviewHunkRecord[] {
+        const review = this.getActiveReview();
+        return review?.hunkReviews || [];
+    }
+
+    setHunkReviews(hunks: ReviewHunkRecord[]): void {
+        const review = this.requireActiveReview();
+        review.hunkReviews = hunks;
+        this.saveRegistry();
+    }
+
+    upsertHunkReview(hunk: ReviewHunkRecord): void {
+        const review = this.requireActiveReview();
+        const hunkReviews = review.hunkReviews || [];
+        const existingIndex = hunkReviews.findIndex(existing => existing.hunkId === hunk.hunkId);
+        if (existingIndex >= 0) {
+            hunkReviews[existingIndex] = hunk;
+        } else {
+            hunkReviews.push(hunk);
+        }
+        review.hunkReviews = hunkReviews;
+        this.saveRegistry();
+    }
+
+    setHunkDecision(hunkId: string, decision: ReviewDecision, timestamp: string = new Date().toISOString()): void {
+        const review = this.requireActiveReview();
+        const hunk = review.hunkReviews?.find(candidate => candidate.hunkId === hunkId);
+        if (!hunk) {
+            throw new Error(`No hunk review found for ${hunkId}`);
+        }
+
+        hunk.decision = decision;
+        hunk.updatedAt = timestamp;
+        if (decision === 'approved' || decision === 'question' || decision === 'disputed') {
+            hunk.reviewedAt = timestamp;
+        }
+        if (decision === 'resolved') {
+            hunk.resolvedAt = timestamp;
+        }
+        this.saveRegistry();
+    }
+
     getReviewedFiles(): string[] {
         const review = this.getActiveReview();
         return review?.reviewedFiles || [];
@@ -127,6 +169,14 @@ export class LocalPrManager {
             review.reviewedFiles = files;
             this.saveRegistry();
         }
+    }
+
+    private requireActiveReview(): LocalPr {
+        const review = this.getActiveReview();
+        if (!review) {
+            throw new Error('No active review');
+        }
+        return review;
     }
 
     dispose(): void {
