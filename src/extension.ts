@@ -1,16 +1,19 @@
 import * as vscode from 'vscode';
+import * as crypto from 'crypto';
 import { GitService } from './git/gitService';
 import { GitFileContentProvider } from './git/gitFileContentProvider';
 import { LocalPrManager } from './services/localPrManager';
 import { StorageService } from './storage/storageService';
 import { BranchSelectorWebviewProvider } from './views/branchSelectorWebviewProvider';
-import { ChangedFilesProvider, FileChangeItem } from './views/changedFilesProvider';
+import { ChangedFilesProvider, FileChangeItem, HunkReviewItem } from './views/changedFilesProvider';
 import { LocalPrsProvider, LocalPrItem } from './views/localPrsProvider';
 import { LocalCommentsProvider, CommentFileItem } from './views/localCommentsProvider';
 import { ReviewCommentController } from './comments/commentController';
 import { LocalReviewTool } from './tools/localReviewTool';
 import { ReviewFileDecorationProvider } from './decorations/fileDecorationProvider';
 import { SuggestChangePanel } from './views/suggestChangePanel';
+import { ReviewDecision, ReviewHunkRecord } from './types';
+import { AiReviewStorageService, AiReviewSessionFile } from './storage/aiReviewStorageService';
 
 export async function activate(context: vscode.ExtensionContext) {
     const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
@@ -25,6 +28,7 @@ export async function activate(context: vscode.ExtensionContext) {
     // Initialize services (will work once git is ready)
     const localPrManager = new LocalPrManager(gitService, workspaceRoot);
     const storageService = new StorageService(localPrManager);
+    const aiReviewStorageService = new AiReviewStorageService(workspaceRoot);
 
     // Register custom URI scheme for git file content
     const gitFileContentProvider = new GitFileContentProvider(gitService);
@@ -80,6 +84,7 @@ export async function activate(context: vscode.ExtensionContext) {
                     item.fileChange.filePath,
                     state === vscode.TreeItemCheckboxState.Checked
                 );
+                writeAiReviewArtifacts();
             }
         }
     });
@@ -110,6 +115,7 @@ export async function activate(context: vscode.ExtensionContext) {
         const activeReview = localPrManager.getActiveReview();
         if (activeReview) {
             await changedFilesProvider.refresh(activeReview.sourceBranch, activeReview.targetBranch);
+            writeAiReviewArtifacts();
             syncReviewableFiles();
             await commentController.loadAllThreads(gitService, activeReview.sourceBranch, activeReview.targetBranch);
         }
@@ -120,6 +126,7 @@ export async function activate(context: vscode.ExtensionContext) {
         if (base && compare && base !== compare) {
             await localPrManager.createReview(base, compare);
             await changedFilesProvider.refresh(base, compare);
+            writeAiReviewArtifacts();
             syncReviewableFiles();
             localCommentsProvider.refresh();
             await commentController.loadAllThreads(gitService, base, compare);
@@ -139,6 +146,7 @@ export async function activate(context: vscode.ExtensionContext) {
             if (refreshTimer) { clearTimeout(refreshTimer); }
             refreshTimer = setTimeout(async () => {
                 await changedFilesProvider.refresh(active.sourceBranch, active.targetBranch);
+                writeAiReviewArtifacts();
                 syncReviewableFiles();
             }, 500);
         })
@@ -168,6 +176,7 @@ export async function activate(context: vscode.ExtensionContext) {
             const active = localPrManager.getActiveReview();
             if (!active) { return; }
             await changedFilesProvider.refresh(active.sourceBranch, active.targetBranch);
+            writeAiReviewArtifacts();
             syncReviewableFiles();
             fileDecorationProvider.refresh();
         })
@@ -196,6 +205,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
             const review = await localPrManager.createReview(source, target);
             await changedFilesProvider.refresh(source, target);
+            writeAiReviewArtifacts();
             syncReviewableFiles();
             localCommentsProvider.refresh();
             vscode.window.showInformationMessage(`Review created: ${target} -> ${source}`);
@@ -208,6 +218,7 @@ export async function activate(context: vscode.ExtensionContext) {
             localPrManager.setActiveReview(item.review.id);
             branchSelectorProvider.refresh();
             await changedFilesProvider.refresh(item.review.sourceBranch, item.review.targetBranch);
+            writeAiReviewArtifacts();
             syncReviewableFiles();
             localCommentsProvider.refresh();
             await commentController.loadAllThreads(gitService, item.review.sourceBranch, item.review.targetBranch);
@@ -239,6 +250,7 @@ export async function activate(context: vscode.ExtensionContext) {
             const active = localPrManager.getActiveReview();
             if (active) {
                 await changedFilesProvider.refresh(active.sourceBranch, active.targetBranch);
+                writeAiReviewArtifacts();
                 syncReviewableFiles();
             }
         })
@@ -272,28 +284,187 @@ export async function activate(context: vscode.ExtensionContext) {
     // Open diff
     context.subscriptions.push(
         vscode.commands.registerCommand('localPrReview.openDiff', async (item: FileChangeItem) => {
-            const leftUri = vscode.Uri.parse(
-                `git-local-review://authority/${item.fileChange.filePath}?ref=${encodeURIComponent(item.sourceBranch)}`
-            );
-
-            // If compare branch is the current branch, show working tree file instead of committed version
-            const isWorkingTree = await gitService.isCurrentBranch(item.targetBranch);
-            const workspaceUri = vscode.workspace.workspaceFolders?.[0]?.uri;
-            const rightUri = isWorkingTree && workspaceUri
-                ? vscode.Uri.joinPath(workspaceUri, item.fileChange.filePath)
-                : vscode.Uri.parse(
-                    `git-local-review://authority/${item.fileChange.filePath}?ref=${encodeURIComponent(item.targetBranch)}`
-                );
-
-            const title = `${item.fileChange.filePath} (${item.sourceBranch} <-> ${item.targetBranch})`;
-
-            await vscode.commands.executeCommand('vscode.diff', leftUri, rightUri, title);
-
-            // Load comments for this file on both sides of the diff
-            commentController.loadThreadsForFile(leftUri, item.fileChange.filePath);
-            commentController.loadThreadsForFile(rightUri, item.fileChange.filePath);
+            await openReviewDiff(item.fileChange.filePath, item.sourceBranch, item.targetBranch);
         })
     );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand('localPrReview.openHunk', async (item: HunkReviewItem) => {
+            await openReviewDiff(item.hunk.filePath, item.sourceBranch, item.targetBranch);
+        })
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand('localPrReview.approveHunk', async (item: HunkReviewItem) => {
+            await updateHunkDecision(item, 'approved');
+        })
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand('localPrReview.questionHunk', async (item: HunkReviewItem) => {
+            await updateHunkDecision(item, 'question');
+        })
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand('localPrReview.disputeHunk', async (item: HunkReviewItem) => {
+            await updateHunkDecision(item, 'disputed');
+        })
+    );
+
+    async function openReviewDiff(filePath: string, sourceBranch: string, targetBranch: string): Promise<void> {
+        const leftUri = vscode.Uri.parse(
+            `git-local-review://authority/${filePath}?ref=${encodeURIComponent(sourceBranch)}`
+        );
+
+        // If compare branch is the current branch, show working tree file instead of committed version
+        const isWorkingTree = await gitService.isCurrentBranch(targetBranch);
+        const workspaceUri = vscode.workspace.workspaceFolders?.[0]?.uri;
+        const rightUri = isWorkingTree && workspaceUri
+            ? vscode.Uri.joinPath(workspaceUri, filePath)
+            : vscode.Uri.parse(
+                `git-local-review://authority/${filePath}?ref=${encodeURIComponent(targetBranch)}`
+            );
+
+        const title = `${filePath} (${sourceBranch} <-> ${targetBranch})`;
+
+        await vscode.commands.executeCommand('vscode.diff', leftUri, rightUri, title);
+
+        // Load comments for this file on both sides of the diff
+        commentController.loadThreadsForFile(leftUri, filePath);
+        commentController.loadThreadsForFile(rightUri, filePath);
+    }
+
+    async function updateHunkDecision(item: HunkReviewItem, decision: ReviewDecision): Promise<void> {
+        const hunk = await buildUpdatedHunk(item.hunk, decision);
+        if (!hunk) { return; }
+
+        localPrManager.upsertHunkReview(hunk);
+        await changedFilesProvider.refresh(item.sourceBranch, item.targetBranch);
+        aiReviewStorageService.appendLedgerEvent({
+            reviewId: localPrManager.getActiveReview()?.id || 'unknown-review',
+            timestamp: hunk.updatedAt,
+            type: 'hunk-decision',
+            hunkId: hunk.hunkId,
+            decision,
+            filePath: hunk.filePath,
+        });
+        writeAiReviewArtifacts();
+        vscode.window.showInformationMessage(`Marked hunk ${hunk.hunkId} as ${decision}.`);
+    }
+
+    async function buildUpdatedHunk(hunk: ReviewHunkRecord, decision: ReviewDecision): Promise<ReviewHunkRecord | undefined> {
+        const timestamp = new Date().toISOString();
+        const comments = [...hunk.comments];
+
+        if (decision === 'question' || decision === 'disputed') {
+            const prompt = decision === 'question'
+                ? 'Question for this hunk'
+                : 'Reason this hunk is disputed';
+            const body = await vscode.window.showInputBox({
+                prompt,
+                ignoreFocusOut: true,
+            });
+            if (!body) {
+                return undefined;
+            }
+            comments.push({
+                id: crypto.randomUUID(),
+                body,
+                author: process.env.USERNAME || process.env.USER || 'reviewer',
+                timestamp,
+            });
+        }
+
+        return {
+            ...hunk,
+            decision,
+            comments,
+            updatedAt: timestamp,
+            reviewedAt: decision === 'approved' || decision === 'question' || decision === 'disputed'
+                ? timestamp
+                : hunk.reviewedAt,
+            resolvedAt: decision === 'resolved' ? timestamp : hunk.resolvedAt,
+        };
+    }
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand('localPrReview.generateActiveFeedback', () => {
+            writeAiReviewArtifacts();
+            vscode.window.showInformationMessage(`Generated ${aiReviewStorageService.getActiveFeedbackPath()}.`);
+        })
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand('localPrReview.copyReconciliationPrompt', async () => {
+            writeAiReviewArtifacts();
+            const prompt = [
+                'Read .ai-review/active-feedback.md and reconcile every disputed item.',
+                'For questions, provide a direct answer before making speculative changes.',
+                'Run the relevant tests, then report results by hunk ID.',
+                'Do not modify .ai-review files.',
+            ].join('\n');
+            await vscode.env.clipboard.writeText(prompt);
+            vscode.window.showInformationMessage('Copied Copilot reconciliation prompt.');
+        })
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand('localPrReview.validateReview', () => {
+            writeAiReviewArtifacts();
+            const findings = validateActiveReview();
+            if (findings.length === 0) {
+                vscode.window.showInformationMessage('Review validation passed.');
+                return;
+            }
+            vscode.window.showWarningMessage(`Review validation found ${findings.length} issue(s): ${findings.join('; ')}`);
+        })
+    );
+
+    function writeAiReviewArtifacts(): void {
+        const review = localPrManager.getActiveReview();
+        if (!review) { return; }
+
+        const hunks = changedFilesProvider.getHunkReviews();
+        const timestamp = new Date().toISOString();
+        const session: AiReviewSessionFile = {
+            version: 1,
+            reviewId: review.id,
+            sourceBranch: review.sourceBranch,
+            targetBranch: review.targetBranch,
+            baselineCommit: review.sourceCommit,
+            targetCommit: review.targetCommit,
+            createdAt: review.createdAt,
+            updatedAt: timestamp,
+            hunkIds: hunks.map(hunk => hunk.hunkId),
+        };
+
+        aiReviewStorageService.writeSession(session);
+        aiReviewStorageService.writeActiveFeedback({
+            reviewId: review.id,
+            baselineCommit: review.sourceCommit,
+            generatedAt: timestamp,
+            hunks,
+        });
+    }
+
+    function validateActiveReview(): string[] {
+        const hunks = changedFilesProvider.getHunkReviews();
+        const pending = hunks.filter(hunk => hunk.decision === 'pending');
+        const disputed = hunks.filter(hunk => hunk.decision === 'disputed');
+        const stale = hunks.filter(hunk => hunk.decision === 'stale');
+        const findings: string[] = [];
+        if (pending.length > 0) {
+            findings.push(`${pending.length} pending hunk${pending.length === 1 ? '' : 's'}`);
+        }
+        if (disputed.length > 0) {
+            findings.push(`${disputed.length} disputed hunk${disputed.length === 1 ? '' : 's'}`);
+        }
+        if (stale.length > 0) {
+            findings.push(`${stale.length} stale approval${stale.length === 1 ? '' : 's'}`);
+        }
+        return findings;
+    }
 
     // Comment commands
     context.subscriptions.push(

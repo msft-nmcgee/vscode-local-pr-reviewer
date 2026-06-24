@@ -148,6 +148,40 @@
         "title": "Open Diff"
       },
       {
+        "command": "localPrReview.openHunk",
+        "title": "Open Hunk"
+      },
+      {
+        "command": "localPrReview.approveHunk",
+        "title": "Approve Hunk",
+        "icon": "$(pass)"
+      },
+      {
+        "command": "localPrReview.questionHunk",
+        "title": "Question Hunk",
+        "icon": "$(question)"
+      },
+      {
+        "command": "localPrReview.disputeHunk",
+        "title": "Dispute Hunk",
+        "icon": "$(error)"
+      },
+      {
+        "command": "localPrReview.generateActiveFeedback",
+        "title": "Generate Active Feedback",
+        "icon": "$(file-code)"
+      },
+      {
+        "command": "localPrReview.copyReconciliationPrompt",
+        "title": "Copy Copilot Reconciliation Prompt",
+        "icon": "$(copy)"
+      },
+      {
+        "command": "localPrReview.validateReview",
+        "title": "Validate Review",
+        "icon": "$(checklist)"
+      },
+      {
         "command": "localPrReview.refreshFiles",
         "title": "Refresh Changed Files",
         "icon": "$(refresh)"
@@ -228,6 +262,16 @@
           "group": "navigation@3"
         },
         {
+          "command": "localPrReview.validateReview",
+          "when": "view == localPrReview.changedFiles",
+          "group": "navigation@4"
+        },
+        {
+          "command": "localPrReview.copyReconciliationPrompt",
+          "when": "view == localPrReview.changedFiles",
+          "group": "navigation@5"
+        },
+        {
           "command": "localPrReview.refreshPrs",
           "when": "view == localPrReview.localPrs",
           "group": "navigation"
@@ -253,6 +297,21 @@
           "command": "localPrReview.openFile",
           "when": "view == localPrReview.changedFiles && viewItem == fileChange",
           "group": "inline"
+        },
+        {
+          "command": "localPrReview.approveHunk",
+          "when": "view == localPrReview.changedFiles && viewItem == hunkReview",
+          "group": "inline@1"
+        },
+        {
+          "command": "localPrReview.questionHunk",
+          "when": "view == localPrReview.changedFiles && viewItem == hunkReview",
+          "group": "inline@2"
+        },
+        {
+          "command": "localPrReview.disputeHunk",
+          "when": "view == localPrReview.changedFiles && viewItem == hunkReview",
+          "group": "inline@3"
         }
       ],
       "comments/commentThread/context": [
@@ -305,7 +364,7 @@
   },
   "scripts": {
     "compile": "tsc -p ./",
-    "test": "npm run compile && node --test out/git/diffParser.test.js",
+    "test": "npm run compile && node --test out/git/diffParser.test.js out/git/reviewIndexService.test.js out/storage/aiReviewStorageService.test.js",
     "watch": "tsc -watch -p ./",
     "lint": "eslint src --ext ts"
   },

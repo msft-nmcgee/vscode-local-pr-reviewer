@@ -1,10 +1,10 @@
 import * as vscode from 'vscode';
-import { FileChange, CommitInfo } from '../types';
+import { CommitInfo, DiffHunk, FileChange, ReviewDecision, ReviewHunkRecord } from '../types';
 import { GitService } from '../git/gitService';
 import { StorageService } from '../storage/storageService';
 import { LocalPrManager } from '../services/localPrManager';
 
-export type ChangedFileTreeItem = SectionItem | FolderItem | FileChangeItem | CommitItem | MessageItem;
+export type ChangedFileTreeItem = SectionItem | FolderItem | FileChangeItem | HunkReviewItem | CommitItem | MessageItem;
 
 export class ChangedFilesProvider implements vscode.TreeDataProvider<ChangedFileTreeItem> {
     private _onDidChangeTreeData = new vscode.EventEmitter<ChangedFileTreeItem | undefined>();
@@ -15,6 +15,7 @@ export class ChangedFilesProvider implements vscode.TreeDataProvider<ChangedFile
     private sourceBranch: string = '';
     private targetBranch: string = '';
     private reviewedFiles: Set<string> = new Set();
+    private hunkReviews: ReviewHunkRecord[] = [];
     private filesSection: SectionItem | undefined;
     private commitsSection: SectionItem | undefined;
 
@@ -40,11 +41,14 @@ export class ChangedFilesProvider implements vscode.TreeDataProvider<ChangedFile
         if (element instanceof FolderItem) {
             return element.children;
         }
+        if (element instanceof FileChangeItem) {
+            return element.children;
+        }
         return [];
     }
 
     getParent(element: ChangedFileTreeItem): ChangedFileTreeItem | undefined {
-        if (element instanceof FileChangeItem || element instanceof FolderItem) {
+        if (element instanceof FileChangeItem || element instanceof FolderItem || element instanceof HunkReviewItem) {
             return this.filesSection;
         }
         if (element instanceof CommitItem) {
@@ -108,12 +112,14 @@ export class ChangedFilesProvider implements vscode.TreeDataProvider<ChangedFile
     }
 
     private createFileItem(file: FileChange, commentCounts: Map<string, number>, useBasename: boolean): FileChangeItem {
+        const hunks = this.getHunksForFile(file.filePath);
         const item = new FileChangeItem(
             file, this.sourceBranch, this.targetBranch,
             commentCounts.get(file.filePath) || 0,
-            useBasename
+            useBasename,
+            hunks.map(h => new HunkReviewItem(h, this.sourceBranch, this.targetBranch))
         );
-        item.checkboxState = this.reviewedFiles.has(file.filePath)
+        item.checkboxState = this.isFileApproved(file.filePath)
             ? vscode.TreeItemCheckboxState.Checked
             : vscode.TreeItemCheckboxState.Unchecked;
         return item;
@@ -138,34 +144,94 @@ export class ChangedFilesProvider implements vscode.TreeDataProvider<ChangedFile
         } else {
             this.reviewedFiles.delete(filePath);
         }
+        const decision: ReviewDecision = checked ? 'approved' : 'pending';
+        const timestamp = new Date().toISOString();
+        this.hunkReviews = this.hunkReviews.map(hunk => hunk.filePath === filePath
+            ? {
+                ...hunk,
+                decision,
+                updatedAt: timestamp,
+                reviewedAt: checked ? timestamp : hunk.reviewedAt,
+            }
+            : hunk);
+        this.localPrManager.setHunkReviews(this.hunkReviews);
         this.localPrManager.setReviewedFiles(Array.from(this.reviewedFiles));
+        this._onDidChangeTreeData.fire(undefined);
     }
 
     async refresh(sourceBranch: string, targetBranch: string): Promise<void> {
         this.sourceBranch = sourceBranch;
         this.targetBranch = targetBranch;
         this.reviewedFiles = new Set(this.localPrManager.getReviewedFiles());
+        this.hunkReviews = this.localPrManager.getHunkReviews();
 
         if (!sourceBranch || !targetBranch) {
             this.files = [];
             this.commits = [];
+            this.hunkReviews = [];
             this._onDidChangeTreeData.fire(undefined);
             return;
         }
 
         try {
-            const [files, commits] = await Promise.all([
+            const [files, commits, hunks] = await Promise.all([
                 this.gitService.getChangedFiles(sourceBranch, targetBranch),
                 this.gitService.getCommitsBetween(sourceBranch, targetBranch),
+                this.gitService.getDiffHunks(sourceBranch, targetBranch),
             ]);
             this.files = files;
             this.commits = commits;
+            this.hunkReviews = this.mergeHunkReviews(hunks);
+            this.localPrManager.setHunkReviews(this.hunkReviews);
         } catch (e: any) {
             vscode.window.showErrorMessage(`Failed to get changed files: ${e.message}`);
             this.files = [];
             this.commits = [];
+            this.hunkReviews = [];
         }
         this._onDidChangeTreeData.fire(undefined);
+    }
+
+    private mergeHunkReviews(hunks: DiffHunk[]): ReviewHunkRecord[] {
+        const existingById = new Map(this.localPrManager.getHunkReviews().map(hunk => [hunk.hunkId, hunk]));
+        const timestamp = new Date().toISOString();
+        return hunks.map(hunk => {
+            const existing = existingById.get(hunk.hunkId);
+            return {
+                ...existing,
+                hunkId: hunk.hunkId,
+                filePath: hunk.filePath,
+                oldFilePath: hunk.oldFilePath,
+                status: hunk.status,
+                oldRange: hunk.oldRange,
+                newRange: hunk.newRange,
+                patchHash: hunk.patchHash,
+                baselineCommit: hunk.sourceCommit || '',
+                targetCommit: hunk.targetCommit || '',
+                contextBefore: hunk.contextBefore,
+                contextAfter: hunk.contextAfter,
+                decision: existing?.decision || 'pending',
+                comments: existing?.comments || [],
+                createdAt: existing?.createdAt || timestamp,
+                updatedAt: existing?.updatedAt || timestamp,
+                reviewedAt: existing?.reviewedAt,
+                resolvedAt: existing?.resolvedAt,
+            };
+        });
+    }
+
+    private getHunksForFile(filePath: string): ReviewHunkRecord[] {
+        return this.hunkReviews
+            .filter(hunk => hunk.filePath === filePath)
+            .sort((left, right) => left.newRange.start - right.newRange.start);
+    }
+
+    private isFileApproved(filePath: string): boolean {
+        const hunks = this.getHunksForFile(filePath);
+        if (hunks.length === 0) {
+            return this.reviewedFiles.has(filePath);
+        }
+        return hunks.every(hunk => hunk.decision === 'approved');
     }
 
     getAllExpandableItems(): ChangedFileTreeItem[] {
@@ -208,9 +274,14 @@ export class ChangedFilesProvider implements vscode.TreeDataProvider<ChangedFile
         return { source: this.sourceBranch, target: this.targetBranch };
     }
 
+    getHunkReviews(): ReviewHunkRecord[] {
+        return this.hunkReviews;
+    }
+
     clear(): void {
         this.files = [];
         this.commits = [];
+        this.hunkReviews = [];
         this.reviewedFiles.clear();
         this._onDidChangeTreeData.fire(undefined);
     }
@@ -273,12 +344,16 @@ export class FileChangeItem extends vscode.TreeItem {
         public readonly sourceBranch: string,
         public readonly targetBranch: string,
         public readonly commentCount: number = 0,
-        useBasename: boolean = false
+        useBasename: boolean = false,
+        public readonly children: HunkReviewItem[] = []
     ) {
         const displayName = useBasename
             ? fileChange.filePath.substring(fileChange.filePath.lastIndexOf('/') + 1)
             : fileChange.filePath;
-        super(displayName, vscode.TreeItemCollapsibleState.None);
+        super(
+            displayName,
+            children.length > 0 ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None
+        );
 
         // Set resourceUri so FileDecorationProvider can show comment badges
         const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri;
@@ -288,7 +363,8 @@ export class FileChangeItem extends vscode.TreeItem {
 
         const statusLabel = fileChange.status.charAt(0).toUpperCase();
         this.tooltip = `${fileChange.status}: ${fileChange.filePath}${commentCount > 0 ? ` (${commentCount} unresolved comment${commentCount > 1 ? 's' : ''})` : ''}`;
-        this.description = commentCount > 0 ? `${statusLabel}  💬 ${commentCount}` : statusLabel;
+        const hunkSummary = children.length > 0 ? ` ${children.length} hunk${children.length === 1 ? '' : 's'}` : '';
+        this.description = commentCount > 0 ? `${statusLabel}${hunkSummary}  💬 ${commentCount}` : `${statusLabel}${hunkSummary}`;
         this.contextValue = 'fileChange';
 
         switch (fileChange.status) {
@@ -311,6 +387,43 @@ export class FileChangeItem extends vscode.TreeItem {
             title: 'Open Diff',
             arguments: [this],
         };
+    }
+}
+
+export class HunkReviewItem extends vscode.TreeItem {
+    constructor(
+        public readonly hunk: ReviewHunkRecord,
+        public readonly sourceBranch: string,
+        public readonly targetBranch: string
+    ) {
+        const endLine = hunk.newRange.start + Math.max(hunk.newRange.count - 1, 0);
+        super(`Hunk ${hunk.newRange.start}-${endLine}`, vscode.TreeItemCollapsibleState.None);
+        this.description = hunk.decision;
+        this.tooltip = `${hunk.decision}: ${hunk.filePath}:${hunk.newRange.start}-${endLine}\n${hunk.hunkId}`;
+        this.contextValue = 'hunkReview';
+        this.iconPath = new vscode.ThemeIcon(getHunkIcon(hunk.decision));
+        this.command = {
+            command: 'localPrReview.openHunk',
+            title: 'Open Hunk',
+            arguments: [this],
+        };
+    }
+}
+
+function getHunkIcon(decision: ReviewDecision): string {
+    switch (decision) {
+        case 'approved':
+            return 'pass';
+        case 'question':
+            return 'question';
+        case 'disputed':
+            return 'error';
+        case 'stale':
+            return 'warning';
+        case 'resolved':
+            return 'check';
+        default:
+            return 'circle-large-outline';
     }
 }
 
