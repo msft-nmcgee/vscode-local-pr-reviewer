@@ -192,6 +192,16 @@
         "icon": "$(hubot)"
       },
       {
+        "command": "localPrReview.generateHarnessContext",
+        "title": "Generate Harness Context",
+        "icon": "$(file-code)"
+      },
+      {
+        "command": "localPrReview.openHarnessContext",
+        "title": "Open Harness Context",
+        "icon": "$(go-to-file)"
+      },
+      {
         "command": "localPrReview.openAgentReview",
         "title": "Open Agent Review",
         "icon": "$(comment-discussion)"
@@ -317,29 +327,39 @@
           "group": "navigation@5"
         },
         {
-          "command": "localPrReview.validateReview",
+          "command": "localPrReview.generateHarnessContext",
           "when": "view == localPrReview.changedFiles",
           "group": "navigation@6"
         },
         {
-          "command": "localPrReview.copyReconciliationPrompt",
+          "command": "localPrReview.openHarnessContext",
           "when": "view == localPrReview.changedFiles",
           "group": "navigation@7"
         },
         {
-          "command": "localPrReview.completeSession",
+          "command": "localPrReview.validateReview",
           "when": "view == localPrReview.changedFiles",
           "group": "navigation@8"
         },
         {
-          "command": "localPrReview.initializeReviewBoard",
+          "command": "localPrReview.copyReconciliationPrompt",
           "when": "view == localPrReview.changedFiles",
           "group": "navigation@9"
         },
         {
-          "command": "localPrReview.openReviewBoardConfig",
+          "command": "localPrReview.completeSession",
           "when": "view == localPrReview.changedFiles",
           "group": "navigation@10"
+        },
+        {
+          "command": "localPrReview.initializeReviewBoard",
+          "when": "view == localPrReview.changedFiles",
+          "group": "navigation@11"
+        },
+        {
+          "command": "localPrReview.openReviewBoardConfig",
+          "when": "view == localPrReview.changedFiles",
+          "group": "navigation@12"
         },
         {
           "command": "localPrReview.refreshPrs",
@@ -450,7 +470,7 @@
   "scripts": {
     "clean": "node -e \"require('fs').rmSync('out', { recursive: true, force: true })\"",
     "compile": "tsc -p ./",
-    "test": "npm run clean && npm run compile && node --test out/agents/agenticReviewPrompt.test.js out/agents/reviewBoardConfigService.test.js out/git/diffParser.test.js out/git/reviewIndexService.test.js out/storage/aiReviewStorageService.test.js",
+    "test": "npm run clean && npm run compile && node --test out/agents/agenticReviewPrompt.test.js out/agents/reviewBoardConfigService.test.js out/git/diffParser.test.js out/git/reviewIndexService.test.js out/harness/harnessContextService.test.js out/storage/aiReviewStorageService.test.js",
     "vscode:prepublish": "npm run clean && npm run compile",
     "watch": "tsc -watch -p ./",
     "lint": "eslint src --ext ts"

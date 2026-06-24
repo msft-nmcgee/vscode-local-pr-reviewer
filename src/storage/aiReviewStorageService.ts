@@ -3,6 +3,7 @@ import * as path from 'path';
 import * as crypto from 'crypto';
 import { ReviewDecision, ReviewHunkRecord } from '../types';
 import type { AgenticReviewInvocation } from '../agents/agenticReviewService';
+import type { HarnessManifest } from '../harness/harnessContextService';
 
 export interface AiReviewLedgerEvent {
     version: 1;
@@ -41,6 +42,8 @@ export class AiReviewStorageService {
     private readonly agentReviewsDir: string;
     private readonly ledgerPath: string;
     private readonly activeFeedbackPath: string;
+    private readonly harnessContextPath: string;
+    private readonly harnessManifestPath: string;
 
     constructor(private readonly workspaceRoot: string) {
         this.aiReviewDir = path.join(workspaceRoot, '.ai-review');
@@ -48,6 +51,8 @@ export class AiReviewStorageService {
         this.agentReviewsDir = path.join(this.aiReviewDir, 'agent-reviews');
         this.ledgerPath = path.join(this.aiReviewDir, 'ledger.jsonl');
         this.activeFeedbackPath = path.join(this.aiReviewDir, 'active-feedback.md');
+        this.harnessContextPath = path.join(this.aiReviewDir, 'harness-context.md');
+        this.harnessManifestPath = path.join(this.aiReviewDir, 'harness-manifest.json');
     }
 
     getLedgerPath(): string {
@@ -56,6 +61,14 @@ export class AiReviewStorageService {
 
     getActiveFeedbackPath(): string {
         return this.activeFeedbackPath;
+    }
+
+    getHarnessContextPath(): string {
+        return this.harnessContextPath;
+    }
+
+    getHarnessManifestPath(): string {
+        return this.harnessManifestPath;
     }
 
     getSessionPath(reviewId: string): string {
@@ -100,6 +113,11 @@ export class AiReviewStorageService {
             .map(fileName => path.join(this.agentReviewsDir, fileName))
             .map(filePath => JSON.parse(fs.readFileSync(filePath, 'utf8')) as AgenticReviewInvocation)
             .sort((left, right) => left.completedAt.localeCompare(right.completedAt));
+    }
+
+    writeHarnessArtifacts(manifest: HarnessManifest, markdown: string): void {
+        atomicWriteFile(this.harnessManifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+        atomicWriteFile(this.harnessContextPath, markdown);
     }
 
     renderActiveFeedback(input: ActiveFeedbackInput): string {

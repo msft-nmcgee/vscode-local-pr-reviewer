@@ -17,6 +17,7 @@ import { AiReviewStorageService, AiReviewSessionFile } from './storage/aiReviewS
 import { ReviewBoardConfigService } from './agents/reviewBoardConfigService';
 import { AgenticReviewService } from './agents/agenticReviewService';
 import { AgenticReviewScope } from './agents/agenticReviewPrompt';
+import { buildHarnessManifest, renderHarnessContext } from './harness/harnessContextService';
 
 export async function activate(context: vscode.ExtensionContext) {
     const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
@@ -528,6 +529,7 @@ export async function activate(context: vscode.ExtensionContext) {
                 );
                 const outputPath = aiReviewStorageService.writeAgenticReviewInvocation(invocation);
                 await changedFilesProvider.refresh(sourceBranch, targetBranch);
+                writeHarnessArtifacts();
                 aiReviewStorageService.appendLedgerEvent({
                     reviewId: review.id,
                     timestamp: invocation.completedAt,
@@ -586,6 +588,21 @@ export async function activate(context: vscode.ExtensionContext) {
         vscode.commands.registerCommand('localPrReview.generateActiveFeedback', () => {
             writeAiReviewArtifacts();
             vscode.window.showInformationMessage(`Generated ${aiReviewStorageService.getActiveFeedbackPath()}.`);
+        })
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand('localPrReview.generateHarnessContext', () => {
+            writeHarnessArtifacts();
+            vscode.window.showInformationMessage(`Generated ${aiReviewStorageService.getHarnessContextPath()} and ${aiReviewStorageService.getHarnessManifestPath()}.`);
+        })
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand('localPrReview.openHarnessContext', async () => {
+            writeHarnessArtifacts();
+            const document = await vscode.workspace.openTextDocument(aiReviewStorageService.getHarnessContextPath());
+            await vscode.window.showTextDocument(document);
         })
     );
 
@@ -697,6 +714,28 @@ export async function activate(context: vscode.ExtensionContext) {
             generatedAt: timestamp,
             hunks,
         });
+    }
+
+    function writeHarnessArtifacts(): void {
+        const review = localPrManager.getActiveReview();
+        if (!review) { return; }
+
+        const generatedAt = new Date().toISOString();
+        const manifest = buildHarnessManifest({
+            review: {
+                id: review.id,
+                sourceBranch: review.sourceBranch,
+                targetBranch: review.targetBranch,
+                baselineCommit: review.sourceCommit,
+                targetCommit: review.targetCommit,
+                createdAt: review.createdAt,
+            },
+            generatedAt,
+            hunks: changedFilesProvider.getHunkReviews(),
+            agents: reviewBoardConfigService.loadAgents(),
+            agentReviewInvocations: aiReviewStorageService.loadAgenticReviewInvocations(),
+        });
+        aiReviewStorageService.writeHarnessArtifacts(manifest, renderHarnessContext(manifest));
     }
 
     function validateActiveReview(): string[] {
