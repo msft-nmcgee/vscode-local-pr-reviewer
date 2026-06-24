@@ -47,7 +47,7 @@ export class AiReviewStorageService {
     private readonly harnessAgentPath: string;
 
     constructor(private readonly workspaceRoot: string) {
-        this.aiReviewDir = path.join(workspaceRoot, '.ai-review');
+        this.aiReviewDir = resolveGitLocalReviewDir(workspaceRoot);
         this.sessionsDir = path.join(this.aiReviewDir, 'sessions');
         this.agentReviewsDir = path.join(this.aiReviewDir, 'agent-reviews');
         this.ledgerPath = path.join(this.aiReviewDir, 'ledger.jsonl');
@@ -213,6 +213,26 @@ function appendComments(lines: string[], hunk: ReviewHunkRecord): void {
 
 function sanitizeFileName(value: string): string {
     return value.replace(/[^a-zA-Z0-9._-]/g, '-');
+}
+
+function resolveGitLocalReviewDir(workspaceRoot: string): string {
+    const dotGitPath = path.join(workspaceRoot, '.git');
+    if (fs.existsSync(dotGitPath) && fs.statSync(dotGitPath).isDirectory()) {
+        return path.join(dotGitPath, 'ai-review');
+    }
+
+    if (fs.existsSync(dotGitPath) && fs.statSync(dotGitPath).isFile()) {
+        const gitFile = fs.readFileSync(dotGitPath, 'utf8').trim();
+        const match = /^gitdir:\s*(.+)$/i.exec(gitFile);
+        if (match) {
+            const gitDir = path.isAbsolute(match[1])
+                ? match[1]
+                : path.resolve(workspaceRoot, match[1]);
+            return path.join(gitDir, 'ai-review');
+        }
+    }
+
+    return path.join(dotGitPath, 'ai-review');
 }
 
 function ensureDirectory(directoryPath: string): void {

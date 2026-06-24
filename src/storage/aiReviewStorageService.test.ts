@@ -8,7 +8,7 @@ import { ReviewHunkRecord } from '../types';
 import { AgenticReviewInvocation } from '../agents/agenticReviewService';
 
 describe('AiReviewStorageService', () => {
-    it('appends ledger events and writes session files under .ai-review', () => {
+    it('appends ledger events and writes session files under git-local ai-review storage', () => {
         const workspace = createTempWorkspace();
         try {
             const service = new AiReviewStorageService(workspace);
@@ -37,6 +37,7 @@ describe('AiReviewStorageService', () => {
             service.writeSession(session);
 
             assert.equal(event.version, 1);
+            assert.equal(service.getLedgerPath().startsWith(path.join(workspace, '.git', 'ai-review')), true);
             assert.deepEqual(readJsonLines(service.getLedgerPath()), [event]);
             assert.deepEqual(JSON.parse(fs.readFileSync(service.getSessionPath('review/1'), 'utf8')), session);
         } finally {
@@ -132,7 +133,9 @@ Why is this write non-atomic?
 });
 
 function createTempWorkspace(): string {
-    return fs.mkdtempSync(path.join(os.tmpdir(), 'ai-review-storage-'));
+    const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'ai-review-storage-'));
+    fs.mkdirSync(path.join(workspace, '.git'), { recursive: true });
+    return workspace;
 }
 
 function readJsonLines(filePath: string): unknown[] {

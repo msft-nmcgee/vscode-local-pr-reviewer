@@ -594,7 +594,7 @@ export async function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(
         vscode.commands.registerCommand('localPrReview.generateHarnessContext', () => {
             writeHarnessArtifacts();
-            vscode.window.showInformationMessage(`Generated harness context, manifest, and agent instructions under .ai-review.`);
+            vscode.window.showInformationMessage('Generated harness context, manifest, and agent instructions under .git/ai-review.');
         })
     );
 
@@ -610,10 +610,10 @@ export async function activate(context: vscode.ExtensionContext) {
         vscode.commands.registerCommand('localPrReview.copyReconciliationPrompt', async () => {
             writeAiReviewArtifacts();
             const prompt = [
-                'Read .ai-review/active-feedback.md and reconcile every disputed item.',
+                'Read .git/ai-review/active-feedback.md and reconcile every disputed item.',
                 'For questions, provide a direct answer before making speculative changes.',
                 'Run the relevant tests, then report results by hunk ID.',
-                'Do not modify .ai-review files.',
+                'Do not modify .git/ai-review files.',
             ].join('\n');
             await vscode.env.clipboard.writeText(prompt);
             vscode.window.showInformationMessage('Copied Copilot reconciliation prompt.');

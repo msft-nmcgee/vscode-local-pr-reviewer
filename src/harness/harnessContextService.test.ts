@@ -50,8 +50,8 @@ describe('harnessContextService', () => {
         const instructions = renderHarnessAgentInstructions();
 
         assert.match(instructions, /AI Review Reconciliation Agent/);
-        assert.match(instructions, /\.ai-review\/harness-manifest\.json/);
-        assert.match(instructions, /Do not modify files under `.ai-review\/`/);
+        assert.match(instructions, /\.git\/ai-review\/harness-manifest\.json/);
+        assert.match(instructions, /Do not modify files under `.git\/ai-review\/`/);
         assert.match(instructions, /Hunk-by-hunk reconciliation/);
     });
 });

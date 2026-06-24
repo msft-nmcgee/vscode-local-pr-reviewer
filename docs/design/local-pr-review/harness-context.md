@@ -1,14 +1,14 @@
 # Harness Context Artifacts
 
-Local PR Review can generate external harness artifacts under `.ai-review/` so a CLI or other agent runner can reconcile human and agentic review findings without relying on VS Code state.
+Local PR Review can generate external harness artifacts under `.git/ai-review/` so a CLI or other agent runner can reconcile human and agentic review findings without relying on VS Code state or adding trackable files to the workspace.
 
 ## Generated files
 
 | File | Purpose |
 | --- | --- |
-| `.ai-review/harness-context.md` | Human/agent-readable Markdown summary of the review session, hunk structure, active reviewers, patches, human comments, and agentic reviewer outputs. |
-| `.ai-review/harness-manifest.json` | Tool-readable manifest with the same core data for external harnesses. |
-| `.ai-review/harness-agent.md` | Instructions for a CLI or external agent to reconcile reviewer outputs against hunk-linked code context. |
+| `.git/ai-review/harness-context.md` | Human/agent-readable Markdown summary of the review session, hunk structure, active reviewers, patches, human comments, and agentic reviewer outputs. |
+| `.git/ai-review/harness-manifest.json` | Tool-readable manifest with the same core data for external harnesses. |
+| `.git/ai-review/harness-agent.md` | Instructions for a CLI or external agent to reconcile reviewer outputs against hunk-linked code context. |
 
 Both files are generated review state. Do not edit them by hand; regenerate them from the extension.
 
@@ -58,6 +58,6 @@ Each hunk includes:
 
 ## Reviewer configuration
 
-Only repo-local `.ai-review-agents/<agent-id>/agent.md` files are active. Scaffold templates are optional starting points, not hardcoded active reviewers.
+Only repo-local `.ai-review-agents/<agent-id>/agent.md` files are active. Scaffold templates are optional starting points, not hardcoded active reviewers. Unlike generated review state, these agent config files are intentionally workspace files so teams may choose whether to keep them local or commit them.
 
 External harnesses should treat missing reviewer config as "no active reviewers" rather than implicitly enabling defaults.
