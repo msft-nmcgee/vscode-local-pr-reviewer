@@ -172,6 +172,26 @@
         "icon": "$(discard)"
       },
       {
+        "command": "localPrReview.reviewHunkWithAgents",
+        "title": "Review Hunk with Agents",
+        "icon": "$(hubot)"
+      },
+      {
+        "command": "localPrReview.reviewFileWithAgents",
+        "title": "Review File with Agents",
+        "icon": "$(hubot)"
+      },
+      {
+        "command": "localPrReview.reviewSelectedHunksWithAgents",
+        "title": "Review Selected Hunks with Agents",
+        "icon": "$(hubot)"
+      },
+      {
+        "command": "localPrReview.reviewAllPendingWithAgents",
+        "title": "Review All Pending Hunks with Agents",
+        "icon": "$(hubot)"
+      },
+      {
         "command": "localPrReview.generateActiveFeedback",
         "title": "Generate Active Feedback",
         "icon": "$(file-code)"
@@ -282,29 +302,39 @@
           "group": "navigation@3"
         },
         {
-          "command": "localPrReview.validateReview",
+          "command": "localPrReview.reviewSelectedHunksWithAgents",
           "when": "view == localPrReview.changedFiles",
           "group": "navigation@4"
         },
         {
-          "command": "localPrReview.copyReconciliationPrompt",
+          "command": "localPrReview.reviewAllPendingWithAgents",
           "when": "view == localPrReview.changedFiles",
           "group": "navigation@5"
         },
         {
-          "command": "localPrReview.completeSession",
+          "command": "localPrReview.validateReview",
           "when": "view == localPrReview.changedFiles",
           "group": "navigation@6"
         },
         {
-          "command": "localPrReview.initializeReviewBoard",
+          "command": "localPrReview.copyReconciliationPrompt",
           "when": "view == localPrReview.changedFiles",
           "group": "navigation@7"
         },
         {
-          "command": "localPrReview.openReviewBoardConfig",
+          "command": "localPrReview.completeSession",
           "when": "view == localPrReview.changedFiles",
           "group": "navigation@8"
+        },
+        {
+          "command": "localPrReview.initializeReviewBoard",
+          "when": "view == localPrReview.changedFiles",
+          "group": "navigation@9"
+        },
+        {
+          "command": "localPrReview.openReviewBoardConfig",
+          "when": "view == localPrReview.changedFiles",
+          "group": "navigation@10"
         },
         {
           "command": "localPrReview.refreshPrs",
@@ -334,24 +364,34 @@
           "group": "inline"
         },
         {
-          "command": "localPrReview.approveHunk",
-          "when": "view == localPrReview.changedFiles && viewItem == hunkReview",
+          "command": "localPrReview.reviewFileWithAgents",
+          "when": "view == localPrReview.changedFiles && viewItem == fileChange",
           "group": "inline@1"
         },
         {
-          "command": "localPrReview.questionHunk",
+          "command": "localPrReview.approveHunk",
           "when": "view == localPrReview.changedFiles && viewItem == hunkReview",
           "group": "inline@2"
         },
         {
-          "command": "localPrReview.disputeHunk",
+          "command": "localPrReview.questionHunk",
           "when": "view == localPrReview.changedFiles && viewItem == hunkReview",
           "group": "inline@3"
         },
         {
-          "command": "localPrReview.revertHunk",
+          "command": "localPrReview.disputeHunk",
           "when": "view == localPrReview.changedFiles && viewItem == hunkReview",
           "group": "inline@4"
+        },
+        {
+          "command": "localPrReview.revertHunk",
+          "when": "view == localPrReview.changedFiles && viewItem == hunkReview",
+          "group": "inline@5"
+        },
+        {
+          "command": "localPrReview.reviewHunkWithAgents",
+          "when": "view == localPrReview.changedFiles && viewItem == hunkReview",
+          "group": "inline@6"
         }
       ],
       "comments/commentThread/context": [
@@ -405,7 +445,7 @@
   "scripts": {
     "clean": "node -e \"require('fs').rmSync('out', { recursive: true, force: true })\"",
     "compile": "tsc -p ./",
-    "test": "npm run clean && npm run compile && node --test out/agents/reviewBoardConfigService.test.js out/git/diffParser.test.js out/git/reviewIndexService.test.js out/storage/aiReviewStorageService.test.js",
+    "test": "npm run clean && npm run compile && node --test out/agents/agenticReviewPrompt.test.js out/agents/reviewBoardConfigService.test.js out/git/diffParser.test.js out/git/reviewIndexService.test.js out/storage/aiReviewStorageService.test.js",
     "vscode:prepublish": "npm run clean && npm run compile",
     "watch": "tsc -watch -p ./",
     "lint": "eslint src --ext ts"

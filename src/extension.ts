@@ -15,6 +15,8 @@ import { SuggestChangePanel } from './views/suggestChangePanel';
 import { ReviewDecision, ReviewHunkRecord } from './types';
 import { AiReviewStorageService, AiReviewSessionFile } from './storage/aiReviewStorageService';
 import { ReviewBoardConfigService } from './agents/reviewBoardConfigService';
+import { AgenticReviewService } from './agents/agenticReviewService';
+import { AgenticReviewScope } from './agents/agenticReviewPrompt';
 
 export async function activate(context: vscode.ExtensionContext) {
     const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
@@ -31,6 +33,7 @@ export async function activate(context: vscode.ExtensionContext) {
     const storageService = new StorageService(localPrManager);
     const aiReviewStorageService = new AiReviewStorageService(workspaceRoot);
     const reviewBoardConfigService = new ReviewBoardConfigService(workspaceRoot);
+    const agenticReviewService = new AgenticReviewService();
 
     // Register custom URI scheme for git file content
     const gitFileContentProvider = new GitFileContentProvider(gitService);
@@ -323,6 +326,42 @@ export async function activate(context: vscode.ExtensionContext) {
     );
 
     context.subscriptions.push(
+        vscode.commands.registerCommand('localPrReview.reviewHunkWithAgents', async (item: HunkReviewItem) => {
+            await runAgenticReview('hunk', [item.hunk], item.sourceBranch, item.targetBranch);
+        })
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand('localPrReview.reviewFileWithAgents', async (item: FileChangeItem) => {
+            await runAgenticReview(
+                'file',
+                item.children.map(child => child.hunk),
+                item.sourceBranch,
+                item.targetBranch,
+            );
+        })
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand('localPrReview.reviewSelectedHunksWithAgents', async () => {
+            const selectedHunks = changedFilesTreeView.selection
+                .filter((item): item is HunkReviewItem => item instanceof HunkReviewItem)
+                .map(item => item.hunk);
+            const branches = changedFilesProvider.getBranches();
+            await runAgenticReview('selected-hunks', selectedHunks, branches.source, branches.target);
+        })
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand('localPrReview.reviewAllPendingWithAgents', async () => {
+            const pendingHunks = changedFilesProvider.getHunkReviews()
+                .filter(hunk => hunk.decision === 'pending');
+            const branches = changedFilesProvider.getBranches();
+            await runAgenticReview('all-pending', pendingHunks, branches.source, branches.target);
+        })
+    );
+
+    context.subscriptions.push(
         vscode.commands.registerCommand('localPrReview.revertHunk', async (item: HunkReviewItem) => {
             await revertHunk(item);
         })
@@ -424,6 +463,76 @@ export async function activate(context: vscode.ExtensionContext) {
         await changedFilesProvider.refresh(item.sourceBranch, item.targetBranch);
         writeAiReviewArtifacts();
         vscode.window.showInformationMessage(`Reverted hunk ${item.hunk.hunkId}.`);
+    }
+
+    async function runAgenticReview(
+        scope: AgenticReviewScope,
+        hunks: ReviewHunkRecord[],
+        sourceBranch: string,
+        targetBranch: string
+    ): Promise<void> {
+        const review = localPrManager.getActiveReview();
+        if (!review) {
+            vscode.window.showWarningMessage('Create or activate a review before invoking agentic review.');
+            return;
+        }
+        if (hunks.length === 0) {
+            vscode.window.showWarningMessage('No hunks are available for this agentic review scope.');
+            return;
+        }
+
+        const configuredAgents = reviewBoardConfigService.loadAgents().filter(agent => agent.enabled);
+        if (configuredAgents.length === 0) {
+            vscode.window.showWarningMessage('No enabled agentic reviewers found. Add repo-local agent.md files or scaffold templates first.');
+            return;
+        }
+
+        const selectedAgents = await vscode.window.showQuickPick(
+            configuredAgents.map(agent => ({
+                label: agent.displayName,
+                description: agent.id,
+                detail: `${agent.role} reviewer`,
+                picked: true,
+                agent,
+            })),
+            {
+                title: `Run ${scope} agentic review for ${hunks.length} hunk(s)`,
+                canPickMany: true,
+            }
+        );
+        if (!selectedAgents || selectedAgents.length === 0) { return; }
+
+        await vscode.window.withProgress(
+            {
+                location: vscode.ProgressLocation.Notification,
+                title: `Running ${selectedAgents.length} reviewer(s) against ${hunks.length} hunk(s)`,
+                cancellable: true,
+            },
+            async (_progress, token) => {
+                const invocation = await agenticReviewService.runReview(
+                    review.id,
+                    { scope, sourceBranch, targetBranch, hunks },
+                    selectedAgents.map(item => item.agent),
+                    token,
+                );
+                const outputPath = aiReviewStorageService.writeAgenticReviewInvocation(invocation);
+                aiReviewStorageService.appendLedgerEvent({
+                    reviewId: review.id,
+                    timestamp: invocation.completedAt,
+                    type: 'agentic-review',
+                    details: {
+                        invocationId: invocation.invocationId,
+                        scope,
+                        hunkIds: invocation.hunkIds,
+                        agentIds: invocation.results.map(result => result.agentId),
+                        outputPath,
+                    },
+                });
+                const completed = invocation.results.filter(result => result.status === 'completed').length;
+                const failed = invocation.results.filter(result => result.status === 'failed').length;
+                vscode.window.showInformationMessage(`Agentic review complete: ${completed} completed, ${failed} failed.`);
+            }
+        );
     }
 
     async function buildUpdatedHunk(hunk: ReviewHunkRecord, decision: ReviewDecision): Promise<ReviewHunkRecord | undefined> {

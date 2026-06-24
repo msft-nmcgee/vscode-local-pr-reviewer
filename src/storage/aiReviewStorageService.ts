@@ -2,13 +2,14 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as crypto from 'crypto';
 import { ReviewDecision, ReviewHunkRecord } from '../types';
+import type { AgenticReviewInvocation } from '../agents/agenticReviewService';
 
 export interface AiReviewLedgerEvent {
     version: 1;
     eventId: string;
     reviewId: string;
     timestamp: string;
-    type: 'session-created' | 'hunk-decision' | 'projection-generated';
+    type: 'session-created' | 'hunk-decision' | 'projection-generated' | 'agentic-review';
     hunkId?: string;
     decision?: ReviewDecision;
     filePath?: string;
@@ -37,12 +38,14 @@ export interface ActiveFeedbackInput {
 export class AiReviewStorageService {
     private readonly aiReviewDir: string;
     private readonly sessionsDir: string;
+    private readonly agentReviewsDir: string;
     private readonly ledgerPath: string;
     private readonly activeFeedbackPath: string;
 
     constructor(private readonly workspaceRoot: string) {
         this.aiReviewDir = path.join(workspaceRoot, '.ai-review');
         this.sessionsDir = path.join(this.aiReviewDir, 'sessions');
+        this.agentReviewsDir = path.join(this.aiReviewDir, 'agent-reviews');
         this.ledgerPath = path.join(this.aiReviewDir, 'ledger.jsonl');
         this.activeFeedbackPath = path.join(this.aiReviewDir, 'active-feedback.md');
     }
@@ -79,6 +82,12 @@ export class AiReviewStorageService {
         const markdown = this.renderActiveFeedback(input);
         atomicWriteFile(this.activeFeedbackPath, markdown);
         return markdown;
+    }
+
+    writeAgenticReviewInvocation(invocation: AgenticReviewInvocation): string {
+        const filePath = path.join(this.agentReviewsDir, `${sanitizeFileName(invocation.invocationId)}.json`);
+        atomicWriteFile(filePath, `${JSON.stringify(invocation, null, 2)}\n`);
+        return filePath;
     }
 
     renderActiveFeedback(input: ActiveFeedbackInput): string {

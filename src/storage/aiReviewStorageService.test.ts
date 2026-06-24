@@ -20,6 +20,7 @@ describe('AiReviewStorageService', () => {
                 decision: 'approved',
                 filePath: 'src/example.ts',
             });
+
             const session: AiReviewSessionFile = {
                 version: 1,
                 reviewId: 'review/1',
@@ -37,6 +38,37 @@ describe('AiReviewStorageService', () => {
             assert.equal(event.version, 1);
             assert.deepEqual(readJsonLines(service.getLedgerPath()), [event]);
             assert.deepEqual(JSON.parse(fs.readFileSync(service.getSessionPath('review/1'), 'utf8')), session);
+        } finally {
+            fs.rmSync(workspace, { recursive: true, force: true });
+        }
+    });
+
+    it('writes agentic review invocation result files', () => {
+        const workspace = createTempWorkspace();
+        try {
+            const service = new AiReviewStorageService(workspace);
+            const filePath = service.writeAgenticReviewInvocation({
+                invocationId: 'invoke-1',
+                reviewId: 'review-1',
+                scope: 'hunk',
+                sourceBranch: 'main',
+                targetBranch: 'feature',
+                hunkIds: ['sha256:abc'],
+                requestedAt: '2026-06-24T12:00:00.000Z',
+                completedAt: '2026-06-24T12:01:00.000Z',
+                results: [{
+                    agentId: 'security',
+                    displayName: 'Security Reviewer',
+                    role: 'security',
+                    color: '#d73a49',
+                    status: 'completed',
+                    output: 'No findings.',
+                }],
+            });
+
+            const written = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+            assert.equal(written.invocationId, 'invoke-1');
+            assert.equal(written.results[0].agentId, 'security');
         } finally {
             fs.rmSync(workspace, { recursive: true, force: true });
         }
