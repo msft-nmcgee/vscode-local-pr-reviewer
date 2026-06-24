@@ -509,13 +509,13 @@ export async function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(
         vscode.commands.registerCommand('localPrReview.initializeReviewBoard', async () => {
             try {
-                const writtenPaths = reviewBoardConfigService.initializeDefaultAgents();
+                const writtenPaths = reviewBoardConfigService.initializeAgentTemplates();
                 const agents = reviewBoardConfigService.loadAgents();
                 if (writtenPaths.length === 0) {
-                    vscode.window.showInformationMessage(`Agentic review board already configured with ${agents.length} reviewer(s).`);
+                    vscode.window.showInformationMessage(`No new agentic reviewer templates were created. ${agents.length} reviewer(s) are currently configured.`);
                     return;
                 }
-                vscode.window.showInformationMessage(`Initialized ${writtenPaths.length} agentic reviewer config file(s).`);
+                vscode.window.showInformationMessage(`Scaffolded ${writtenPaths.length} optional agentic reviewer template(s).`);
             } catch (err: any) {
                 vscode.window.showErrorMessage(`Failed to initialize agentic review board: ${err.message}`);
             }
@@ -540,7 +540,7 @@ export async function activate(context: vscode.ExtensionContext) {
                     { title: 'Open agentic reviewer configuration' }
                 );
                 if (!selected?.agent.sourcePath) {
-                    vscode.window.showInformationMessage('Run Initialize Agentic Review Board to create editable repo-local agent.md files.');
+                    vscode.window.showInformationMessage('Run Scaffold Agentic Review Board Templates to create editable repo-local agent.md files.');
                     return;
                 }
                 const document = await vscode.workspace.openTextDocument(selected.agent.sourcePath);

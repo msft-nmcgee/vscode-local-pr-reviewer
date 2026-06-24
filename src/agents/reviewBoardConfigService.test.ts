@@ -3,40 +3,60 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { describe, it } from 'node:test';
-import { defaultReviewAgents, ReviewBoardConfigService } from './reviewBoardConfigService';
+import { defaultAgentTemplates, ReviewBoardConfigService } from './reviewBoardConfigService';
 
 describe('ReviewBoardConfigService', () => {
-    it('returns built-in default reviewers when no repo config exists', () => {
+    it('returns no active reviewers when no repo agent.md files exist', () => {
         const workspace = createTempWorkspace();
         try {
             const agents = new ReviewBoardConfigService(workspace).loadAgents();
 
-            assert.deepEqual(agents.map(agent => agent.id), [
-                'security',
-                'performance',
-                'architecture',
-                'reliability',
-                'maintainability',
-                'testability',
-            ]);
-            assert.equal(agents.every(agent => agent.enabled), true);
+            assert.deepEqual(agents, []);
         } finally {
             fs.rmSync(workspace, { recursive: true, force: true });
         }
     });
 
-    it('initializes and loads repo-local agent.md files', () => {
+    it('initializes optional repo-local agent.md templates and then loads only present files', () => {
         const workspace = createTempWorkspace();
         try {
             const service = new ReviewBoardConfigService(workspace);
-            const written = service.initializeDefaultAgents();
+            const written = service.initializeAgentTemplates();
             const loaded = service.loadAgents();
 
-            assert.equal(written.length, defaultReviewAgents().length);
+            assert.equal(written.length, defaultAgentTemplates().length);
             assert.equal(fs.existsSync(path.join(workspace, '.ai-review-agents', 'security', 'agent.md')), true);
-            assert.deepEqual(loaded.map(agent => agent.id).sort(), defaultReviewAgents().map(agent => agent.id).sort());
+            assert.deepEqual(loaded.map(agent => agent.id).sort(), defaultAgentTemplates().map(agent => agent.id).sort());
             assert.equal(loaded.find(agent => agent.id === 'security')?.blocking.high, true);
             assert.equal(loaded.find(agent => agent.id === 'maintainability')?.blocking.high, false);
+        } finally {
+            fs.rmSync(workspace, { recursive: true, force: true });
+        }
+    });
+
+    it('loads only the agent.md files present in the repository', () => {
+        const workspace = createTempWorkspace();
+        try {
+            const service = new ReviewBoardConfigService(workspace);
+            const securityTemplate = defaultAgentTemplates().find(agent => agent.id === 'security');
+            assert.ok(securityTemplate);
+            const agentDir = path.join(workspace, '.ai-review-agents', 'security');
+            fs.mkdirSync(agentDir, { recursive: true });
+            fs.writeFileSync(path.join(agentDir, 'agent.md'), [
+                '---',
+                `id: ${securityTemplate.id}`,
+                `displayName: ${securityTemplate.displayName}`,
+                `role: ${securityTemplate.role}`,
+                `color: ${securityTemplate.color}`,
+                'enabled: true',
+                'blockCritical: true',
+                'blockHigh: true',
+                '---',
+                securityTemplate.prompt,
+                '',
+            ].join('\n'), 'utf8');
+
+            assert.deepEqual(service.loadAgents().map(agent => agent.id), ['security']);
         } finally {
             fs.rmSync(workspace, { recursive: true, force: true });
         }

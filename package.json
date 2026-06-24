@@ -193,7 +193,7 @@
       },
       {
         "command": "localPrReview.initializeReviewBoard",
-        "title": "Initialize Agentic Review Board",
+        "title": "Scaffold Agentic Review Board Templates",
         "icon": "$(person-add)"
       },
       {

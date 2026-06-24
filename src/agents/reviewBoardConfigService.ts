@@ -21,7 +21,7 @@ export class ReviewBoardConfigService {
     loadAgents(): ReviewAgentDefinition[] {
         const boardDir = this.getReviewBoardDir();
         if (!fs.existsSync(boardDir)) {
-            return defaultReviewAgents();
+            return [];
         }
 
         const agents = fs.readdirSync(boardDir, { withFileTypes: true })
@@ -34,9 +34,9 @@ export class ReviewBoardConfigService {
         return agents;
     }
 
-    initializeDefaultAgents(): string[] {
+    initializeAgentTemplates(): string[] {
         const writtenPaths: string[] = [];
-        for (const agent of defaultReviewAgents()) {
+        for (const agent of defaultAgentTemplates()) {
             const filePath = this.getAgentFilePath(agent.id);
             if (fs.existsSync(filePath)) {
                 continue;
@@ -49,7 +49,7 @@ export class ReviewBoardConfigService {
     }
 }
 
-export function defaultReviewAgents(): ReviewAgentDefinition[] {
+export function defaultAgentTemplates(): ReviewAgentDefinition[] {
     return [
         {
             id: 'security',
