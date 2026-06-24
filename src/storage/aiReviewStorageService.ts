@@ -90,6 +90,18 @@ export class AiReviewStorageService {
         return filePath;
     }
 
+    loadAgenticReviewInvocations(): AgenticReviewInvocation[] {
+        if (!fs.existsSync(this.agentReviewsDir)) {
+            return [];
+        }
+
+        return fs.readdirSync(this.agentReviewsDir)
+            .filter(fileName => fileName.endsWith('.json'))
+            .map(fileName => path.join(this.agentReviewsDir, fileName))
+            .map(filePath => JSON.parse(fs.readFileSync(filePath, 'utf8')) as AgenticReviewInvocation)
+            .sort((left, right) => left.completedAt.localeCompare(right.completedAt));
+    }
+
     renderActiveFeedback(input: ActiveFeedbackInput): string {
         const disputed = this.getActionableHunks(input.hunks, 'disputed');
         const questions = this.getActionableHunks(input.hunks, 'question');

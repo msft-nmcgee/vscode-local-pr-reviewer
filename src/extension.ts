@@ -45,7 +45,7 @@ export async function activate(context: vscode.ExtensionContext) {
     const branchSelectorProvider = new BranchSelectorWebviewProvider(
         context.extensionUri, gitService, localPrManager
     );
-    const changedFilesProvider = new ChangedFilesProvider(gitService, storageService, localPrManager);
+    const changedFilesProvider = new ChangedFilesProvider(gitService, storageService, localPrManager, aiReviewStorageService);
     const localPrsProvider = new LocalPrsProvider(localPrManager);
     const localCommentsProvider = new LocalCommentsProvider(storageService);
 
@@ -362,6 +362,17 @@ export async function activate(context: vscode.ExtensionContext) {
     );
 
     context.subscriptions.push(
+        vscode.commands.registerCommand('localPrReview.openAgentReview', async (item: any) => {
+            const output = item?.result?.output || item?.result?.error || 'No output recorded.';
+            const document = await vscode.workspace.openTextDocument({
+                content: output,
+                language: 'markdown',
+            });
+            await vscode.window.showTextDocument(document, { preview: true });
+        })
+    );
+
+    context.subscriptions.push(
         vscode.commands.registerCommand('localPrReview.revertHunk', async (item: HunkReviewItem) => {
             await revertHunk(item);
         })
@@ -516,6 +527,7 @@ export async function activate(context: vscode.ExtensionContext) {
                     token,
                 );
                 const outputPath = aiReviewStorageService.writeAgenticReviewInvocation(invocation);
+                await changedFilesProvider.refresh(sourceBranch, targetBranch);
                 aiReviewStorageService.appendLedgerEvent({
                     reviewId: review.id,
                     timestamp: invocation.completedAt,

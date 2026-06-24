@@ -3,8 +3,17 @@ import { CommitInfo, DiffHunk, FileChange, ReviewDecision, ReviewHunkRecord } fr
 import { GitService } from '../git/gitService';
 import { StorageService } from '../storage/storageService';
 import { LocalPrManager } from '../services/localPrManager';
+import { AiReviewStorageService } from '../storage/aiReviewStorageService';
+import { AgenticReviewInvocation, AgenticReviewResult } from '../agents/agenticReviewService';
 
-export type ChangedFileTreeItem = SectionItem | FolderItem | FileChangeItem | HunkReviewItem | CommitItem | MessageItem;
+export type ChangedFileTreeItem =
+    SectionItem
+    | FolderItem
+    | FileChangeItem
+    | HunkReviewItem
+    | AgentReviewItem
+    | CommitItem
+    | MessageItem;
 
 export class ChangedFilesProvider implements vscode.TreeDataProvider<ChangedFileTreeItem> {
     private _onDidChangeTreeData = new vscode.EventEmitter<ChangedFileTreeItem | undefined>();
@@ -16,13 +25,15 @@ export class ChangedFilesProvider implements vscode.TreeDataProvider<ChangedFile
     private targetBranch: string = '';
     private reviewedFiles: Set<string> = new Set();
     private hunkReviews: ReviewHunkRecord[] = [];
+    private agentReviewsByHunkId = new Map<string, AgentReviewItem[]>();
     private filesSection: SectionItem | undefined;
     private commitsSection: SectionItem | undefined;
 
     constructor(
         private gitService: GitService,
         private storageService: StorageService,
-        private localPrManager: LocalPrManager
+        private localPrManager: LocalPrManager,
+        private aiReviewStorageService: AiReviewStorageService
     ) {
         this.reviewedFiles = new Set(localPrManager.getReviewedFiles());
     }
@@ -44,11 +55,14 @@ export class ChangedFilesProvider implements vscode.TreeDataProvider<ChangedFile
         if (element instanceof FileChangeItem) {
             return element.children;
         }
+        if (element instanceof HunkReviewItem) {
+            return element.children;
+        }
         return [];
     }
 
     getParent(element: ChangedFileTreeItem): ChangedFileTreeItem | undefined {
-        if (element instanceof FileChangeItem || element instanceof FolderItem || element instanceof HunkReviewItem) {
+        if (element instanceof FileChangeItem || element instanceof FolderItem || element instanceof HunkReviewItem || element instanceof AgentReviewItem) {
             return this.filesSection;
         }
         if (element instanceof CommitItem) {
@@ -117,7 +131,7 @@ export class ChangedFilesProvider implements vscode.TreeDataProvider<ChangedFile
             file, this.sourceBranch, this.targetBranch,
             commentCounts.get(file.filePath) || 0,
             useBasename,
-            hunks.map(h => new HunkReviewItem(h, this.sourceBranch, this.targetBranch))
+            hunks.map(h => new HunkReviewItem(h, this.sourceBranch, this.targetBranch, this.agentReviewsByHunkId.get(h.hunkId) || []))
         );
         item.checkboxState = this.isFileApproved(file.filePath)
             ? vscode.TreeItemCheckboxState.Checked
@@ -164,11 +178,13 @@ export class ChangedFilesProvider implements vscode.TreeDataProvider<ChangedFile
         this.targetBranch = targetBranch;
         this.reviewedFiles = new Set(this.localPrManager.getReviewedFiles());
         this.hunkReviews = this.localPrManager.getHunkReviews();
+        this.agentReviewsByHunkId = this.loadAgentReviewsByHunkId();
 
         if (!sourceBranch || !targetBranch) {
             this.files = [];
             this.commits = [];
             this.hunkReviews = [];
+            this.agentReviewsByHunkId.clear();
             this._onDidChangeTreeData.fire(undefined);
             return;
         }
@@ -188,8 +204,22 @@ export class ChangedFilesProvider implements vscode.TreeDataProvider<ChangedFile
             this.files = [];
             this.commits = [];
             this.hunkReviews = [];
+            this.agentReviewsByHunkId.clear();
         }
         this._onDidChangeTreeData.fire(undefined);
+    }
+
+    private loadAgentReviewsByHunkId(): Map<string, AgentReviewItem[]> {
+        const itemsByHunkId = new Map<string, AgentReviewItem[]>();
+        const invocations = this.aiReviewStorageService.loadAgenticReviewInvocations();
+        for (const invocation of invocations) {
+            for (const hunkId of invocation.hunkIds) {
+                const existing = itemsByHunkId.get(hunkId) || [];
+                existing.push(...invocation.results.map(result => new AgentReviewItem(invocation, result)));
+                itemsByHunkId.set(hunkId, existing);
+            }
+        }
+        return itemsByHunkId;
     }
 
     private mergeHunkReviews(hunks: DiffHunk[]): ReviewHunkRecord[] {
@@ -283,6 +313,7 @@ export class ChangedFilesProvider implements vscode.TreeDataProvider<ChangedFile
         this.files = [];
         this.commits = [];
         this.hunkReviews = [];
+        this.agentReviewsByHunkId.clear();
         this.reviewedFiles.clear();
         this._onDidChangeTreeData.fire(undefined);
     }
@@ -395,11 +426,15 @@ export class HunkReviewItem extends vscode.TreeItem {
     constructor(
         public readonly hunk: ReviewHunkRecord,
         public readonly sourceBranch: string,
-        public readonly targetBranch: string
+        public readonly targetBranch: string,
+        public readonly children: AgentReviewItem[] = []
     ) {
         const endLine = hunk.newRange.start + Math.max(hunk.newRange.count - 1, 0);
-        super(`Hunk ${hunk.newRange.start}-${endLine}`, vscode.TreeItemCollapsibleState.None);
-        this.description = hunk.decision;
+        super(
+            `Hunk ${hunk.newRange.start}-${endLine}`,
+            children.length > 0 ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None
+        );
+        this.description = children.length > 0 ? `${hunk.decision}  ${children.length} agent review${children.length === 1 ? '' : 's'}` : hunk.decision;
         this.tooltip = `${hunk.decision}: ${hunk.filePath}:${hunk.newRange.start}-${endLine}\n${hunk.hunkId}`;
         this.contextValue = 'hunkReview';
         this.iconPath = new vscode.ThemeIcon(getHunkIcon(hunk.decision));
@@ -409,6 +444,37 @@ export class HunkReviewItem extends vscode.TreeItem {
             arguments: [this],
         };
     }
+}
+
+export class AgentReviewItem extends vscode.TreeItem {
+    constructor(
+        public readonly invocation: AgenticReviewInvocation,
+        public readonly result: AgenticReviewResult
+    ) {
+        super(result.displayName, vscode.TreeItemCollapsibleState.None);
+        this.description = result.status;
+        this.tooltip = buildAgentReviewTooltip(invocation, result);
+        this.contextValue = 'agentReview';
+        this.iconPath = new vscode.ThemeIcon(
+            result.status === 'completed' ? 'comment-discussion' : 'warning',
+            new vscode.ThemeColor(result.status === 'completed' ? 'commentsView.resolvedIcon' : 'problemsWarningIcon.foreground')
+        );
+        this.command = {
+            command: 'localPrReview.openAgentReview',
+            title: 'Open Agent Review',
+            arguments: [this],
+        };
+    }
+}
+
+function buildAgentReviewTooltip(invocation: AgenticReviewInvocation, result: AgenticReviewResult): vscode.MarkdownString {
+    const markdown = new vscode.MarkdownString(undefined, true);
+    markdown.supportThemeIcons = true;
+    markdown.appendMarkdown(`**${result.displayName}** (${result.role})\n\n`);
+    markdown.appendMarkdown(`Status: \`${result.status}\`\n\n`);
+    markdown.appendMarkdown(`Invocation: \`${invocation.invocationId}\`\n\n`);
+    markdown.appendMarkdown(result.output || result.error || '_No output recorded._');
+    return markdown;
 }
 
 function getHunkIcon(decision: ReviewDecision): string {

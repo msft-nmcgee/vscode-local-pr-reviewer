@@ -192,6 +192,11 @@
         "icon": "$(hubot)"
       },
       {
+        "command": "localPrReview.openAgentReview",
+        "title": "Open Agent Review",
+        "icon": "$(comment-discussion)"
+      },
+      {
         "command": "localPrReview.generateActiveFeedback",
         "title": "Generate Active Feedback",
         "icon": "$(file-code)"

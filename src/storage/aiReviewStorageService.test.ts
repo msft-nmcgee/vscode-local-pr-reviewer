@@ -5,6 +5,7 @@ import * as path from 'node:path';
 import { describe, it } from 'node:test';
 import { AiReviewSessionFile, AiReviewStorageService } from './aiReviewStorageService';
 import { ReviewHunkRecord } from '../types';
+import { AgenticReviewInvocation } from '../agents/agenticReviewService';
 
 describe('AiReviewStorageService', () => {
     it('appends ledger events and writes session files under .ai-review', () => {
@@ -47,7 +48,7 @@ describe('AiReviewStorageService', () => {
         const workspace = createTempWorkspace();
         try {
             const service = new AiReviewStorageService(workspace);
-            const filePath = service.writeAgenticReviewInvocation({
+            const invocation: AgenticReviewInvocation = {
                 invocationId: 'invoke-1',
                 reviewId: 'review-1',
                 scope: 'hunk',
@@ -64,11 +65,13 @@ describe('AiReviewStorageService', () => {
                     status: 'completed',
                     output: 'No findings.',
                 }],
-            });
+            };
+            const filePath = service.writeAgenticReviewInvocation(invocation);
 
             const written = JSON.parse(fs.readFileSync(filePath, 'utf8'));
             assert.equal(written.invocationId, 'invoke-1');
             assert.equal(written.results[0].agentId, 'security');
+            assert.deepEqual(service.loadAgenticReviewInvocations(), [invocation]);
         } finally {
             fs.rmSync(workspace, { recursive: true, force: true });
         }
