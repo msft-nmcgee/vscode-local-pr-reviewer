@@ -168,6 +168,11 @@ export class GitService {
         }));
     }
 
+    async reverseApplyPatch(patch: string): Promise<void> {
+        await this.execGitArgsWithInput(['apply', '--reverse', '--check'], patch);
+        await this.execGitArgsWithInput(['apply', '--reverse'], patch);
+    }
+
     getFileUri(ref: string, filePath: string): vscode.Uri {
         // Use git show to create a URI for the file at a specific ref
         return vscode.Uri.parse(
@@ -230,6 +235,41 @@ export class GitService {
                     }
                 }
             );
+        });
+    }
+
+    private execGitArgsWithInput(args: string[], input: string): Promise<string> {
+        return new Promise((resolve, reject) => {
+            const child = cp.spawn('git', args, {
+                cwd: this.workspaceRoot,
+                stdio: ['pipe', 'pipe', 'pipe'],
+            });
+
+            let stdout = '';
+            let stderr = '';
+            const timeout = setTimeout(() => {
+                child.kill();
+                reject(new Error(`git ${args.join(' ')} timed out`));
+            }, 30000);
+
+            child.stdout.setEncoding('utf8');
+            child.stderr.setEncoding('utf8');
+            child.stdout.on('data', chunk => { stdout += chunk; });
+            child.stderr.on('data', chunk => { stderr += chunk; });
+            child.on('error', error => {
+                clearTimeout(timeout);
+                reject(error);
+            });
+            child.on('close', code => {
+                clearTimeout(timeout);
+                if (code === 0) {
+                    resolve(stdout);
+                } else {
+                    reject(new Error(stderr || `git ${args.join(' ')} exited with code ${code}`));
+                }
+            });
+
+            child.stdin.end(input);
         });
     }
 }

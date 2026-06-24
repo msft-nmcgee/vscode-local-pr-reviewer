@@ -167,6 +167,11 @@
         "icon": "$(error)"
       },
       {
+        "command": "localPrReview.revertHunk",
+        "title": "Revert Hunk",
+        "icon": "$(discard)"
+      },
+      {
         "command": "localPrReview.generateActiveFeedback",
         "title": "Generate Active Feedback",
         "icon": "$(file-code)"
@@ -180,6 +185,11 @@
         "command": "localPrReview.validateReview",
         "title": "Validate Review",
         "icon": "$(checklist)"
+      },
+      {
+        "command": "localPrReview.completeSession",
+        "title": "Complete Session",
+        "icon": "$(pass-filled)"
       },
       {
         "command": "localPrReview.refreshFiles",
@@ -272,6 +282,11 @@
           "group": "navigation@5"
         },
         {
+          "command": "localPrReview.completeSession",
+          "when": "view == localPrReview.changedFiles",
+          "group": "navigation@6"
+        },
+        {
           "command": "localPrReview.refreshPrs",
           "when": "view == localPrReview.localPrs",
           "group": "navigation"
@@ -312,6 +327,11 @@
           "command": "localPrReview.disputeHunk",
           "when": "view == localPrReview.changedFiles && viewItem == hunkReview",
           "group": "inline@3"
+        },
+        {
+          "command": "localPrReview.revertHunk",
+          "when": "view == localPrReview.changedFiles && viewItem == hunkReview",
+          "group": "inline@4"
         }
       ],
       "comments/commentThread/context": [

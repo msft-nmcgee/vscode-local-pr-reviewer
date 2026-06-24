@@ -72,6 +72,14 @@ export async function activate(context: vscode.ExtensionContext) {
     );
 
     // Changed files tree view with checkbox support
+    const selectedHunkDecoration = vscode.window.createTextEditorDecorationType({
+        backgroundColor: new vscode.ThemeColor('editor.findMatchHighlightBackground'),
+        isWholeLine: true,
+        overviewRulerColor: new vscode.ThemeColor('editor.findMatchHighlightBackground'),
+        overviewRulerLane: vscode.OverviewRulerLane.Right,
+    });
+    context.subscriptions.push(selectedHunkDecoration);
+
     const changedFilesTreeView = vscode.window.createTreeView('localPrReview.changedFiles', {
         treeDataProvider: changedFilesProvider,
         manageCheckboxStateManually: true,
@@ -290,7 +298,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
     context.subscriptions.push(
         vscode.commands.registerCommand('localPrReview.openHunk', async (item: HunkReviewItem) => {
-            await openReviewDiff(item.hunk.filePath, item.sourceBranch, item.targetBranch);
+            await openReviewDiff(item.hunk.filePath, item.sourceBranch, item.targetBranch, item.hunk);
         })
     );
 
@@ -312,7 +320,18 @@ export async function activate(context: vscode.ExtensionContext) {
         })
     );
 
-    async function openReviewDiff(filePath: string, sourceBranch: string, targetBranch: string): Promise<void> {
+    context.subscriptions.push(
+        vscode.commands.registerCommand('localPrReview.revertHunk', async (item: HunkReviewItem) => {
+            await revertHunk(item);
+        })
+    );
+
+    async function openReviewDiff(
+        filePath: string,
+        sourceBranch: string,
+        targetBranch: string,
+        hunk?: ReviewHunkRecord
+    ): Promise<void> {
         const leftUri = vscode.Uri.parse(
             `git-local-review://authority/${filePath}?ref=${encodeURIComponent(sourceBranch)}`
         );
@@ -333,6 +352,34 @@ export async function activate(context: vscode.ExtensionContext) {
         // Load comments for this file on both sides of the diff
         commentController.loadThreadsForFile(leftUri, filePath);
         commentController.loadThreadsForFile(rightUri, filePath);
+
+        if (hunk) {
+            await revealHunk(rightUri, hunk);
+        }
+    }
+
+    async function revealHunk(uri: vscode.Uri, hunk: ReviewHunkRecord): Promise<void> {
+        const editor = await waitForEditor(uri);
+        if (!editor) { return; }
+
+        const startLine = Math.max(hunk.newRange.start - 1, 0);
+        const endLine = Math.max(startLine, startLine + Math.max(hunk.newRange.count - 1, 0));
+        const range = new vscode.Range(startLine, 0, endLine, Number.MAX_SAFE_INTEGER);
+        editor.revealRange(range, vscode.TextEditorRevealType.InCenterIfOutsideViewport);
+        editor.selection = new vscode.Selection(startLine, 0, startLine, 0);
+        editor.setDecorations(selectedHunkDecoration, [range]);
+    }
+
+    async function waitForEditor(uri: vscode.Uri): Promise<vscode.TextEditor | undefined> {
+        const target = uri.toString();
+        for (let attempt = 0; attempt < 10; attempt++) {
+            const editor = vscode.window.visibleTextEditors.find(candidate => candidate.document.uri.toString() === target);
+            if (editor) {
+                return editor;
+            }
+            await new Promise(resolve => setTimeout(resolve, 50));
+        }
+        return undefined;
     }
 
     async function updateHunkDecision(item: HunkReviewItem, decision: ReviewDecision): Promise<void> {
@@ -351,6 +398,30 @@ export async function activate(context: vscode.ExtensionContext) {
         });
         writeAiReviewArtifacts();
         vscode.window.showInformationMessage(`Marked hunk ${hunk.hunkId} as ${decision}.`);
+    }
+
+    async function revertHunk(item: HunkReviewItem): Promise<void> {
+        const isWorkingTree = await gitService.isCurrentBranch(item.targetBranch);
+        if (!isWorkingTree) {
+            vscode.window.showWarningMessage('Hunk revert is only available when the compare branch is the current working tree.');
+            return;
+        }
+        if (!item.hunk.patch) {
+            vscode.window.showWarningMessage('Cannot revert this hunk because its patch text is unavailable.');
+            return;
+        }
+
+        const answer = await vscode.window.showWarningMessage(
+            `Revert ${item.hunk.filePath}:${item.hunk.newRange.start}?`,
+            { modal: true },
+            'Revert Hunk'
+        );
+        if (answer !== 'Revert Hunk') { return; }
+
+        await gitService.reverseApplyPatch(item.hunk.patch);
+        await changedFilesProvider.refresh(item.sourceBranch, item.targetBranch);
+        writeAiReviewArtifacts();
+        vscode.window.showInformationMessage(`Reverted hunk ${item.hunk.hunkId}.`);
     }
 
     async function buildUpdatedHunk(hunk: ReviewHunkRecord, decision: ReviewDecision): Promise<ReviewHunkRecord | undefined> {
@@ -418,6 +489,18 @@ export async function activate(context: vscode.ExtensionContext) {
                 return;
             }
             vscode.window.showWarningMessage(`Review validation found ${findings.length} issue(s): ${findings.join('; ')}`);
+        })
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand('localPrReview.completeSession', () => {
+            writeAiReviewArtifacts();
+            const findings = validateActiveReview();
+            if (findings.length > 0) {
+                vscode.window.showWarningMessage(`Review is not complete: ${findings.join('; ')}`);
+                return;
+            }
+            vscode.window.showInformationMessage('Review session complete. No pending, disputed, or stale hunks remain.');
         })
     );
 

@@ -206,6 +206,7 @@ export class ChangedFilesProvider implements vscode.TreeDataProvider<ChangedFile
                 oldRange: hunk.oldRange,
                 newRange: hunk.newRange,
                 patchHash: hunk.patchHash,
+                patch: hunk.patch,
                 baselineCommit: hunk.sourceCommit || '',
                 targetCommit: hunk.targetCommit || '',
                 contextBefore: hunk.contextBefore,

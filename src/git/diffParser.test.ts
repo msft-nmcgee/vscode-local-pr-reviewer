@@ -23,6 +23,7 @@ index 1111111..2222222 100644
         assert.deepEqual(hunks[0].newRange, { start: 10, count: 5 });
         assert.match(hunks[0].hunkId, /^sha256:[a-f0-9]{64}$/);
         assert.match(hunks[0].patchHash, /^sha256:[a-f0-9]{64}$/);
+        assert.match(hunks[0].patch, /^diff --git a\/src\/example\.ts b\/src\/example\.ts/);
         assert.equal(hunks[0].contextBefore, 'const before = true;');
         assert.equal(hunks[0].contextAfter, '}');
 
@@ -74,10 +75,13 @@ index 1111111..2222222 100644
         assert.equal(hunks.length, 3);
         assert.equal(hunks[0].status, 'added');
         assert.equal(hunks[0].filePath, 'src/added.ts');
+        assert.match(hunks[0].patch, /--- \/dev\/null/);
         assert.equal(hunks[1].status, 'deleted');
         assert.equal(hunks[1].filePath, 'src/deleted.ts');
+        assert.match(hunks[1].patch, /\+\+\+ \/dev\/null/);
         assert.equal(hunks[2].status, 'renamed');
         assert.equal(hunks[2].oldFilePath, 'src/old.ts');
         assert.equal(hunks[2].filePath, 'src/new.ts');
+        assert.match(hunks[2].patch, /^diff --git a\/src\/old\.ts b\/src\/new\.ts/);
     });
 });

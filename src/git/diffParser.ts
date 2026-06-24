@@ -98,7 +98,7 @@ function createDiffHunk(
     hunkHeader: { oldRange: DiffRange; newRange: DiffRange },
     patchLines: string[],
 ): DiffHunk {
-    const patch = patchLines.join('\n');
+    const patch = buildApplyPatch(file, patchLines);
     const normalizedPatch = normalizePatchForHash(patchLines);
     const patchHash = toSha256(normalizedPatch);
     const hunkId = toSha256(`${file.filePath}\n${file.oldFilePath || ''}\n${file.status}\n${patchHash}`);
@@ -120,6 +120,19 @@ function createDiffHunk(
         contextBefore: contextLines[0],
         contextAfter: contextLines.length > 1 ? contextLines[contextLines.length - 1] : undefined,
     };
+}
+
+function buildApplyPatch(file: FileDiffState, patchLines: string[]): string {
+    const oldPath = file.oldFilePath || file.filePath;
+    const oldHeader = file.status === 'added' ? '/dev/null' : `a/${oldPath}`;
+    const newHeader = file.status === 'deleted' ? '/dev/null' : `b/${file.filePath}`;
+    return [
+        `diff --git a/${oldPath} b/${file.filePath}`,
+        `--- ${oldHeader}`,
+        `+++ ${newHeader}`,
+        ...patchLines,
+        '',
+    ].join('\n');
 }
 
 function normalizePatchForHash(patchLines: string[]): string {

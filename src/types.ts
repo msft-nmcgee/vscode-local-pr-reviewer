@@ -38,6 +38,7 @@ export interface ReviewHunkRecord {
     oldRange: DiffRange;
     newRange: DiffRange;
     patchHash: string;
+    patch?: string;
     baselineCommit: string;
     targetCommit: string;
     contextBefore?: string;
