@@ -50,7 +50,7 @@ Install directly from the [VS Code Marketplace](https://marketplace.visualstudio
 - **Open File** - Quick action to open the working copy from the diff view
 - **Multiple Reviews** - Save and switch between review sessions
 - **Copilot Integration** - Query your review comments via Copilot chat using `#localReviewComments`
-- **Persistent Storage** - Comments saved as JSON in `.vscode/local-reviews/`
+- **Persistent Storage** - Review state saved as JSON under `.git/ai-review/`
 
 ## Performance
 
@@ -84,7 +84,7 @@ Core Services
  ├── GitService       — branch list, file diffs, commit log
  ├── CommentController — create, edit, delete, resolve threads
  ├── LocalPrManager   — review CRUD, reviewed-file state
- └── StorageService   — read/write JSON to .vscode/local-reviews/
+ └── StorageService   — read/write JSON to .git/ai-review/local-reviews/
 ```
 
 For the full detailed architecture diagram including data flows and module map, see [ARCHITECTURE.md](ARCHITECTURE.md).
@@ -97,7 +97,7 @@ For the full detailed architecture diagram including data flows and module map, 
 | `GitService` | `src/git/` | Wraps VS Code Git API + `child_process` for diff, branch list, commits |
 | `CommentController` | `src/comments/` | Manages all inline comment threads via the VS Code Comment API |
 | `LocalPrManager` | `src/services/` | Review CRUD — create, load, save, delete, reviewed-file state |
-| `StorageService` | `src/storage/` | Reads and writes review JSON to `.vscode/local-reviews/` |
+| `StorageService` | `src/storage/` | Reads and writes review JSON to `.git/ai-review/local-reviews/` |
 | `BranchSelectorWebviewProvider` | `src/views/` | WebviewView panel for branch selection |
 | `ChangedFilesProvider` | `src/views/` | TreeView — directories + files with badges, checkboxes, open-file action |
 | `LocalCommentsProvider` | `src/views/` | TreeView — flat list of all comment threads and replies |

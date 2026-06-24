@@ -21,7 +21,7 @@ export interface HarnessManifest {
     generatedAt: string;
     review: HarnessContextInput['review'];
     agentConfig: {
-        directory: '.ai-review-agents';
+        directory: '.git/ai-review/agents';
         note: string;
         agents: ReviewAgentDefinition[];
     };
@@ -40,10 +40,10 @@ export function buildHarnessManifest(input: HarnessContextInput): HarnessManifes
         generatedAt: input.generatedAt,
         review: input.review,
         agentConfig: {
-            directory: '.ai-review-agents',
+            directory: '.git/ai-review/agents',
             note: input.agents.length === 0
-                ? 'No reviewers are active because no repo-local agent.md files are present.'
-                : 'Only repo-local agent.md files listed here are active reviewers.',
+                ? 'No reviewers are active because no git-local agent.md files are present.'
+                : 'Only git-local agent.md files listed here are active reviewers.',
             agents: input.agents,
         },
         hunkSchema: {

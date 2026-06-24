@@ -470,7 +470,7 @@
   "scripts": {
     "clean": "node -e \"require('fs').rmSync('out', { recursive: true, force: true })\"",
     "compile": "tsc -p ./",
-    "test": "npm run clean && npm run compile && node --test out/agents/agenticReviewPrompt.test.js out/agents/reviewBoardConfigService.test.js out/git/diffParser.test.js out/git/reviewIndexService.test.js out/harness/harnessContextService.test.js out/storage/aiReviewStorageService.test.js",
+    "test": "npm run clean && npm run compile && node --test out/agents/agenticReviewPrompt.test.js out/agents/reviewBoardConfigService.test.js out/git/diffParser.test.js out/git/reviewIndexService.test.js out/harness/harnessContextService.test.js out/storage/aiReviewPaths.test.js out/storage/aiReviewStorageService.test.js",
     "vscode:prepublish": "npm run clean && npm run compile",
     "watch": "tsc -watch -p ./",
     "lint": "eslint src --ext ts"

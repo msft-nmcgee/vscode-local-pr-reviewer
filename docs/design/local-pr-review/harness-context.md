@@ -29,8 +29,8 @@ Both files are generated review state. Do not edit them by hand; regenerate them
     "createdAt": "2026-06-24T12:00:00.000Z"
   },
   "agentConfig": {
-    "directory": ".ai-review-agents",
-    "note": "Only repo-local agent.md files listed here are active reviewers.",
+    "directory": ".git/ai-review/agents",
+    "note": "Only git-local agent.md files listed here are active reviewers.",
     "agents": []
   },
   "hunkSchema": {
@@ -58,6 +58,6 @@ Each hunk includes:
 
 ## Reviewer configuration
 
-Only repo-local `.ai-review-agents/<agent-id>/agent.md` files are active. Scaffold templates are optional starting points, not hardcoded active reviewers. Unlike generated review state, these agent config files are intentionally workspace files so teams may choose whether to keep them local or commit them.
+Only git-local `.git/ai-review/agents/<agent-id>/agent.md` files are active. Scaffold templates are optional starting points, not hardcoded active reviewers. Reviewer configuration is stored with other generated review state so analyzed repositories are not polluted with trackable project artifacts.
 
 External harnesses should treat missing reviewer config as "no active reviewers" rather than implicitly enabling defaults.

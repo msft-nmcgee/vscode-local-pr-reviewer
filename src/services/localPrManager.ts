@@ -4,6 +4,7 @@ import * as path from 'path';
 import * as crypto from 'crypto';
 import { LocalPr, LocalPrRegistry, ReviewDecision, ReviewHunkRecord } from '../types';
 import { GitService } from '../git/gitService';
+import { migrateLegacyWorkspaceLocalReviewsDir, resolveLocalReviewsDir } from '../storage/aiReviewPaths';
 
 export class LocalPrManager {
     private registry: LocalPrRegistry = { version: 1, reviews: [] };
@@ -17,7 +18,8 @@ export class LocalPrManager {
         private gitService: GitService,
         workspaceRoot: string
     ) {
-        this.reviewsDir = path.join(workspaceRoot, '.vscode', 'local-reviews');
+        migrateLegacyWorkspaceLocalReviewsDir(workspaceRoot);
+        this.reviewsDir = resolveLocalReviewsDir(workspaceRoot);
         this.registryPath = path.join(this.reviewsDir, 'registry.json');
         this.loadRegistry();
     }

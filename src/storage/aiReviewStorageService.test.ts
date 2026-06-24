@@ -49,30 +49,75 @@ describe('AiReviewStorageService', () => {
         const workspace = createTempWorkspace();
         try {
             const service = new AiReviewStorageService(workspace);
-            const invocation: AgenticReviewInvocation = {
-                invocationId: 'invoke-1',
-                reviewId: 'review-1',
-                scope: 'hunk',
-                sourceBranch: 'main',
-                targetBranch: 'feature',
-                hunkIds: ['sha256:abc'],
-                requestedAt: '2026-06-24T12:00:00.000Z',
-                completedAt: '2026-06-24T12:01:00.000Z',
-                results: [{
-                    agentId: 'security',
-                    displayName: 'Security Reviewer',
-                    role: 'security',
-                    color: '#d73a49',
-                    status: 'completed',
-                    output: 'No findings.',
-                }],
-            };
+            const invocation = createInvocation('invoke-1', '2026-06-24T12:01:00.000Z', ['sha256:abc'], [
+                ['security', 'Security Reviewer', 'security', 'No findings.'],
+            ]);
             const filePath = service.writeAgenticReviewInvocation(invocation);
 
             const written = JSON.parse(fs.readFileSync(filePath, 'utf8'));
             assert.equal(written.invocationId, 'invoke-1');
             assert.equal(written.results[0].agentId, 'security');
             assert.deepEqual(service.loadAgenticReviewInvocations(), [invocation]);
+        } finally {
+            fs.rmSync(workspace, { recursive: true, force: true });
+        }
+    });
+
+    it('migrates legacy workspace ai-review artifacts into git-local storage', () => {
+        const workspace = createTempWorkspace();
+        try {
+            const legacyDir = path.join(workspace, '.ai-review');
+            fs.mkdirSync(legacyDir, { recursive: true });
+            fs.writeFileSync(path.join(legacyDir, 'active-feedback.md'), 'legacy feedback', 'utf8');
+
+            const service = new AiReviewStorageService(workspace);
+
+            assert.equal(fs.existsSync(path.join(workspace, '.ai-review')), false);
+            assert.equal(service.getActiveFeedbackPath(), path.join(workspace, '.git', 'ai-review', 'active-feedback.md'));
+            assert.equal(fs.readFileSync(service.getActiveFeedbackPath(), 'utf8'), 'legacy feedback');
+        } finally {
+            fs.rmSync(workspace, { recursive: true, force: true });
+        }
+    });
+
+    it('replaces an earlier result from the same reviewer on the same hunk', () => {
+        const workspace = createTempWorkspace();
+        try {
+            const service = new AiReviewStorageService(workspace);
+            service.writeAgenticReviewInvocation(createInvocation('invoke-1', '2026-06-24T12:01:00.000Z', ['sha256:abc'], [
+                ['security', 'Security Reviewer', 'security', undefined],
+            ]));
+            const replacement = createInvocation('invoke-2', '2026-06-24T12:02:00.000Z', ['sha256:abc'], [
+                ['security', 'Security Reviewer', 'security', 'Concrete finding.'],
+            ]);
+
+            service.writeAgenticReviewInvocation(replacement);
+
+            assert.deepEqual(service.loadAgenticReviewInvocations(), [replacement]);
+            assert.deepEqual(fs.readdirSync(path.join(workspace, '.git', 'ai-review', 'agent-reviews')), ['invoke-2.json']);
+        } finally {
+            fs.rmSync(workspace, { recursive: true, force: true });
+        }
+    });
+
+    it('preserves other hunk and reviewer results when one reviewer reruns one hunk', () => {
+        const workspace = createTempWorkspace();
+        try {
+            const service = new AiReviewStorageService(workspace);
+            service.writeAgenticReviewInvocation(createInvocation('invoke-1', '2026-06-24T12:01:00.000Z', ['sha256:abc', 'sha256:def'], [
+                ['security', 'Security Reviewer', 'security', 'First security.'],
+                ['performance', 'Performance Reviewer', 'performance', 'First performance.'],
+            ]));
+            service.writeAgenticReviewInvocation(createInvocation('invoke-2', '2026-06-24T12:02:00.000Z', ['sha256:abc'], [
+                ['security', 'Security Reviewer', 'security', 'Second security.'],
+            ]));
+
+            const outputs = currentOutputsByHunkAgent(service.loadAgenticReviewInvocations());
+
+            assert.deepEqual(outputs.get('sha256:abc/security'), ['Second security.']);
+            assert.deepEqual(outputs.get('sha256:abc/performance'), ['First performance.']);
+            assert.deepEqual(outputs.get('sha256:def/security'), ['First security.']);
+            assert.deepEqual(outputs.get('sha256:def/performance'), ['First performance.']);
         } finally {
             fs.rmSync(workspace, { recursive: true, force: true });
         }
@@ -143,6 +188,47 @@ function readJsonLines(filePath: string): unknown[] {
         .trim()
         .split('\n')
         .map(line => JSON.parse(line));
+}
+
+function createInvocation(
+    invocationId: string,
+    completedAt: string,
+    hunkIds: string[],
+    results: Array<[agentId: string, displayName: string, role: string, output: string | undefined]>,
+): AgenticReviewInvocation {
+    return {
+        invocationId,
+        reviewId: 'review-1',
+        scope: 'hunk',
+        sourceBranch: 'main',
+        targetBranch: 'feature',
+        hunkIds,
+        requestedAt: '2026-06-24T12:00:00.000Z',
+        completedAt,
+        results: results.map(([agentId, displayName, role, output]) => ({
+            agentId,
+            displayName,
+            role,
+            color: '#d73a49',
+            status: 'completed',
+            output,
+        })),
+    };
+}
+
+function currentOutputsByHunkAgent(invocations: AgenticReviewInvocation[]): Map<string, Array<string | undefined>> {
+    const outputs = new Map<string, Array<string | undefined>>();
+    for (const invocation of invocations) {
+        for (const hunkId of invocation.hunkIds) {
+            for (const result of invocation.results) {
+                const key = `${hunkId}/${result.agentId}`;
+                const existing = outputs.get(key) ?? [];
+                existing.push(result.output);
+                outputs.set(key, existing);
+            }
+        }
+    }
+    return outputs;
 }
 
 function createHunk(

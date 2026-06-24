@@ -495,7 +495,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
         const configuredAgents = reviewBoardConfigService.loadAgents().filter(agent => agent.enabled);
         if (configuredAgents.length === 0) {
-            vscode.window.showWarningMessage('No enabled agentic reviewers found. Add repo-local agent.md files or scaffold templates first.');
+            vscode.window.showWarningMessage('No enabled agentic reviewers found. Add git-local agent.md files or scaffold templates first.');
             return;
         }
 
@@ -678,7 +678,7 @@ export async function activate(context: vscode.ExtensionContext) {
                     { title: 'Open agentic reviewer configuration' }
                 );
                 if (!selected?.agent.sourcePath) {
-                    vscode.window.showInformationMessage('Run Scaffold Agentic Review Board Templates to create editable repo-local agent.md files.');
+                    vscode.window.showInformationMessage('Run Scaffold Agentic Review Board Templates to create editable git-local agent.md files.');
                     return;
                 }
                 const document = await vscode.workspace.openTextDocument(selected.agent.sourcePath);

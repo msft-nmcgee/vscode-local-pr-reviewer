@@ -32,7 +32,7 @@ graph TD
     end
 
     subgraph Persistence ["Persistence"]
-        JSONFiles[".vscode/local-reviews/\n&lt;review-id&gt;.json"]
+        JSONFiles[".git/ai-review/local-reviews/\n&lt;review-id&gt;.json"]
     end
 
     ActivityBar --> BranchSelector & ChangedFiles & CommentsPanel & ReviewsList
@@ -63,7 +63,7 @@ sequenceDiagram
     participant CommentController
     participant LocalPrManager
     participant StorageService
-    participant JSONFiles as .vscode/local-reviews/
+    participant JSONFiles as .git/ai-review/local-reviews/
 
     User->>DiffEditor: Click gutter to add comment
     DiffEditor->>CommentController: onDidCreateCommentThread()
@@ -108,7 +108,7 @@ sequenceDiagram
 | `GitService` | `src/git/` | Wraps VS Code Git API + `child_process` for diff, branch list, commits |
 | `CommentController` | `src/comments/` | Manages all inline comment threads via the VS Code Comment API |
 | `LocalPrManager` | `src/services/` | Review CRUD — create, load, save, delete, reviewed-file state |
-| `StorageService` | `src/storage/` | Reads and writes review JSON to `.vscode/local-reviews/` |
+| `StorageService` | `src/storage/` | Reads and writes review JSON to `.git/ai-review/local-reviews/` |
 | `BranchSelectorWebviewProvider` | `src/views/` | WebviewView panel for branch selection |
 | `ChangedFilesProvider` | `src/views/` | TreeView — directories + files with badges, checkboxes, open-file action |
 | `LocalCommentsProvider` | `src/views/` | TreeView — flat list of all comment threads and replies |
@@ -119,7 +119,7 @@ sequenceDiagram
 
 ## Persistence Format
 
-Each review is stored as a JSON file at `.vscode/local-reviews/<review-id>.json`:
+Each review is stored as git-local JSON under `.git/ai-review/local-reviews/`:
 
 ```json
 {

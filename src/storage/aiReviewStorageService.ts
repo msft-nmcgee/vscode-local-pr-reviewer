@@ -4,6 +4,7 @@ import * as crypto from 'crypto';
 import { ReviewDecision, ReviewHunkRecord } from '../types';
 import type { AgenticReviewInvocation } from '../agents/agenticReviewService';
 import type { HarnessManifest } from '../harness/harnessContextService';
+import { migrateLegacyWorkspaceReviewDir, resolveGitLocalReviewDir } from './aiReviewPaths';
 
 export interface AiReviewLedgerEvent {
     version: 1;
@@ -36,6 +37,11 @@ export interface ActiveFeedbackInput {
     hunks: ReviewHunkRecord[];
 }
 
+interface StoredAgenticReviewInvocation {
+    filePath: string;
+    invocation: AgenticReviewInvocation;
+}
+
 export class AiReviewStorageService {
     private readonly aiReviewDir: string;
     private readonly sessionsDir: string;
@@ -47,6 +53,7 @@ export class AiReviewStorageService {
     private readonly harnessAgentPath: string;
 
     constructor(private readonly workspaceRoot: string) {
+        migrateLegacyWorkspaceReviewDir(workspaceRoot);
         this.aiReviewDir = resolveGitLocalReviewDir(workspaceRoot);
         this.sessionsDir = path.join(this.aiReviewDir, 'sessions');
         this.agentReviewsDir = path.join(this.aiReviewDir, 'agent-reviews');
@@ -106,10 +113,17 @@ export class AiReviewStorageService {
     writeAgenticReviewInvocation(invocation: AgenticReviewInvocation): string {
         const filePath = path.join(this.agentReviewsDir, `${sanitizeFileName(invocation.invocationId)}.json`);
         atomicWriteFile(filePath, `${JSON.stringify(invocation, null, 2)}\n`);
+        this.deleteFullySupersededAgenticReviewFiles(invocation, filePath);
         return filePath;
     }
 
     loadAgenticReviewInvocations(): AgenticReviewInvocation[] {
+        return selectLatestAgenticReviewInvocations(
+            this.loadStoredAgenticReviewInvocations().map(stored => stored.invocation)
+        );
+    }
+
+    private loadStoredAgenticReviewInvocations(): StoredAgenticReviewInvocation[] {
         if (!fs.existsSync(this.agentReviewsDir)) {
             return [];
         }
@@ -117,8 +131,34 @@ export class AiReviewStorageService {
         return fs.readdirSync(this.agentReviewsDir)
             .filter(fileName => fileName.endsWith('.json'))
             .map(fileName => path.join(this.agentReviewsDir, fileName))
-            .map(filePath => JSON.parse(fs.readFileSync(filePath, 'utf8')) as AgenticReviewInvocation)
-            .sort((left, right) => left.completedAt.localeCompare(right.completedAt));
+            .map(filePath => ({
+                filePath,
+                invocation: JSON.parse(fs.readFileSync(filePath, 'utf8')) as AgenticReviewInvocation,
+            }))
+            .sort((left, right) => {
+                const completedComparison = left.invocation.completedAt.localeCompare(right.invocation.completedAt);
+                if (completedComparison !== 0) {
+                    return completedComparison;
+                }
+                return left.filePath.localeCompare(right.filePath);
+            });
+    }
+
+    private deleteFullySupersededAgenticReviewFiles(replacement: AgenticReviewInvocation, replacementPath: string): void {
+        if (replacement.hunkIds.length === 0 || replacement.results.length === 0) {
+            return;
+        }
+
+        const replacementHunkIds = new Set(replacement.hunkIds);
+        const replacementAgentIds = new Set(replacement.results.map(result => result.agentId));
+        for (const stored of this.loadStoredAgenticReviewInvocations()) {
+            if (stored.filePath === replacementPath) {
+                continue;
+            }
+            if (isFullySuperseded(stored.invocation, replacement, replacementHunkIds, replacementAgentIds)) {
+                fs.rmSync(stored.filePath, { force: true });
+            }
+        }
     }
 
     writeHarnessArtifacts(manifest: HarnessManifest, markdown: string, agentInstructions: string): void {
@@ -211,28 +251,77 @@ function appendComments(lines: string[], hunk: ReviewHunkRecord): void {
     }
 }
 
-function sanitizeFileName(value: string): string {
-    return value.replace(/[^a-zA-Z0-9._-]/g, '-');
+function selectLatestAgenticReviewInvocations(invocations: AgenticReviewInvocation[]): AgenticReviewInvocation[] {
+    const latestByReviewHunkAgent = new Map<string, { invocationIndex: number; resultIndex: number }>();
+
+    invocations.forEach((invocation, invocationIndex) => {
+        invocation.results.forEach((result, resultIndex) => {
+            for (const hunkId of invocation.hunkIds) {
+                latestByReviewHunkAgent.set(agentReviewKey(invocation.reviewId, hunkId, result.agentId), {
+                    invocationIndex,
+                    resultIndex,
+                });
+            }
+        });
+    });
+
+    const currentInvocations: AgenticReviewInvocation[] = [];
+    invocations.forEach((invocation, invocationIndex) => {
+        const groupsByResultSet = new Map<string, { hunkIds: string[]; resultIndices: number[] }>();
+        for (const hunkId of invocation.hunkIds) {
+            const currentResultIndices = invocation.results
+                .map((result, resultIndex) => ({ result, resultIndex }))
+                .filter(({ result, resultIndex }) => {
+                    const latest = latestByReviewHunkAgent.get(agentReviewKey(invocation.reviewId, hunkId, result.agentId));
+                    return latest?.invocationIndex === invocationIndex && latest.resultIndex === resultIndex;
+                })
+                .map(({ resultIndex }) => resultIndex);
+
+            if (currentResultIndices.length === 0) {
+                continue;
+            }
+
+            const groupKey = currentResultIndices.join(',');
+            const group = groupsByResultSet.get(groupKey) ?? {
+                hunkIds: [],
+                resultIndices: currentResultIndices,
+            };
+            group.hunkIds.push(hunkId);
+            groupsByResultSet.set(groupKey, group);
+        }
+
+        for (const group of groupsByResultSet.values()) {
+            currentInvocations.push({
+                ...invocation,
+                hunkIds: group.hunkIds,
+                results: group.resultIndices.map(resultIndex => invocation.results[resultIndex]),
+            });
+        }
+    });
+
+    return currentInvocations;
 }
 
-function resolveGitLocalReviewDir(workspaceRoot: string): string {
-    const dotGitPath = path.join(workspaceRoot, '.git');
-    if (fs.existsSync(dotGitPath) && fs.statSync(dotGitPath).isDirectory()) {
-        return path.join(dotGitPath, 'ai-review');
-    }
+function isFullySuperseded(
+    existing: AgenticReviewInvocation,
+    replacement: AgenticReviewInvocation,
+    replacementHunkIds: Set<string>,
+    replacementAgentIds: Set<string>,
+): boolean {
+    return existing.reviewId === replacement.reviewId
+        && existing.completedAt.localeCompare(replacement.completedAt) <= 0
+        && existing.hunkIds.length > 0
+        && existing.results.length > 0
+        && existing.hunkIds.every(hunkId => replacementHunkIds.has(hunkId))
+        && existing.results.every(result => replacementAgentIds.has(result.agentId));
+}
 
-    if (fs.existsSync(dotGitPath) && fs.statSync(dotGitPath).isFile()) {
-        const gitFile = fs.readFileSync(dotGitPath, 'utf8').trim();
-        const match = /^gitdir:\s*(.+)$/i.exec(gitFile);
-        if (match) {
-            const gitDir = path.isAbsolute(match[1])
-                ? match[1]
-                : path.resolve(workspaceRoot, match[1]);
-            return path.join(gitDir, 'ai-review');
-        }
-    }
+function agentReviewKey(reviewId: string, hunkId: string, agentId: string): string {
+    return `${reviewId}\0${hunkId}\0${agentId}`;
+}
 
-    return path.join(dotGitPath, 'ai-review');
+function sanitizeFileName(value: string): string {
+    return value.replace(/[^a-zA-Z0-9._-]/g, '-');
 }
 
 function ensureDirectory(directoryPath: string): void {

@@ -65,7 +65,7 @@ function createAgent(): ReviewAgentDefinition {
         enabled: true,
         blocking: { high: true },
         prompt: 'Find security issues.',
-        sourcePath: '.ai-review-agents/security/agent.md',
+        sourcePath: '.git/ai-review/agents/security/agent.md',
     };
 }
 

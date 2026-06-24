@@ -2,8 +2,6 @@ src/**
 docs/**
 .vscode/**
 .github/**
-.ai-review/**
-.ai-review-agents/**
 node_modules/**
 tsconfig.json
 .eslintrc*

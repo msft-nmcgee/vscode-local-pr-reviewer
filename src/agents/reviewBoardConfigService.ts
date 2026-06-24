@@ -1,21 +1,27 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { ReviewAgentDefinition, ReviewAgentRole } from '../types';
+import { migrateLegacyWorkspaceReviewBoardDir, resolveReviewBoardDir } from '../storage/aiReviewPaths';
 
-const REVIEW_BOARD_DIR = '.ai-review-agents';
 const AGENT_FILE_NAME = 'agent.md';
 
 type AgentFrontMatter = Record<string, string>;
 
 export class ReviewBoardConfigService {
-    constructor(private readonly workspaceRoot: string) {}
+    constructor(private readonly workspaceRoot: string) {
+        this.migrateLegacyWorkspaceBoard();
+    }
 
     getReviewBoardDir(): string {
-        return path.join(this.workspaceRoot, REVIEW_BOARD_DIR);
+        return resolveReviewBoardDir(this.workspaceRoot);
     }
 
     getAgentFilePath(agentId: string): string {
         return path.join(this.getReviewBoardDir(), agentId, AGENT_FILE_NAME);
+    }
+
+    private migrateLegacyWorkspaceBoard(): void {
+        migrateLegacyWorkspaceReviewBoardDir(this.workspaceRoot);
     }
 
     loadAgents(): ReviewAgentDefinition[] {

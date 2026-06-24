@@ -13,7 +13,7 @@
 - **Local Comments:** Lists JSON comment files grouped by Local PR. Click to open the raw JSON file
 - Inline commenting on diff files using VS Code's Comment API (`vscode.comments`)
 - Each comment thread has resolve/unresolve state (`CommentThreadState.Resolved` / `Unresolved`)
-- JSON-backed persistence: `.vscode/local-reviews/{source}_{target}/comments.json`
+- JSON-backed persistence: `.git/ai-review/local-reviews/{source}_{target}/comments.json`
 
 ### Non-Functional
 - Zero network calls -- fully offline
@@ -58,7 +58,7 @@ Extension Entry (extension.ts)
     |     - getActiveReview(): LocalPr | undefined
     |     - setActiveReview(id): void
     |     - listReviews(): LocalPr[]
-    |     - persists to .vscode/local-reviews/registry.json
+    |     - persists to .git/ai-review/local-reviews/registry.json
     |
     +-- ChangedFilesProvider (views/changedFilesProvider.ts)
     |     - implements TreeDataProvider<FileChangeItem>
@@ -82,7 +82,7 @@ Extension Entry (extension.ts)
     |
     +-- StorageService (storage/storageService.ts)
           - save/load comments as JSON
-          - path: .vscode/local-reviews/{source}_{target}/comments.json
+          - path: .git/ai-review/local-reviews/{source}_{target}/comments.json
 ```
 
 ### Key Components
@@ -107,7 +107,7 @@ User triggers "Select Source Branch" command -> QuickPick shows local branches (
 User triggers "Select Destination Branch" command -> QuickPick with search shows local branches
 User clicks "Create Review" button
   -> LocalPrManager.createReview(source, target)
-  -> Saves to .vscode/local-reviews/registry.json
+  -> Saves to .git/ai-review/local-reviews/registry.json
   -> Sets as active review
   -> GitService.getChangedFiles(source, target) runs `git diff --name-status source...target`
   -> ChangedFilesProvider.refresh(files)
@@ -130,7 +130,7 @@ User clicks a Local PR in the list
 User clicks trash icon on a Local PR
   -> Confirmation dialog
   -> LocalPrManager.deleteReview(id)
-  -> Removes .vscode/local-reviews/{source}_{target}/ directory
+  -> Removes .git/ai-review/local-reviews/{source}_{target}/ directory
   -> LocalPrsProvider.refresh()
   -> LocalCommentsProvider.refresh()
   -> If was active, clear Changed Files
@@ -330,7 +330,7 @@ These are reference materials for implementation:
 - [ ] Clicking a file opens the correct diff in VS Code's diff editor
 - [ ] Can add inline comments on any line in the diff
 - [ ] Can resolve/unresolve comment threads
-- [ ] Comments persist to `.vscode/local-reviews/{source}_{target}/comments.json`
+- [ ] Comments persist to `.git/ai-review/local-reviews/{source}_{target}/comments.json`
 - [ ] Comments reload correctly after VS Code restart
 - [ ] All comments visible in the Comments panel tree view
 - [ ] Zero network calls during all operations
