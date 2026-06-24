@@ -50,6 +50,7 @@ Install directly from the [VS Code Marketplace](https://marketplace.visualstudio
 - **Open File** - Quick action to open the working copy from the diff view
 - **Multiple Reviews** - Save and switch between review sessions
 - **Copilot Integration** - Query your review comments via Copilot chat using `#localReviewComments`
+- **Copilot CLI Reconciliation** - Generate `.ai-review/active-feedback.md`, copy a reconciliation prompt, and copy repository instructions for agent handoff
 - **Persistent Storage** - Comments saved as JSON in `.vscode/local-reviews/`
 
 ## Performance
@@ -64,6 +65,17 @@ Local review comments are stored offline, making Copilot queries **36x faster** 
 2. Click the **Local PR Review** icon in the activity bar
 3. Select a **Base** branch and a **Compare** branch
 4. Browse changed files, open diffs, and add comments
+
+## Copilot CLI reconciliation
+
+The hunk-review workflow generates agent-readable feedback under `.ai-review/`.
+
+1. Mark hunks as **Question** or **Dispute** from the Changed Files tree.
+2. Run **Local PR Review: Generate Active Feedback** to refresh `.ai-review/active-feedback.md`.
+3. Run **Local PR Review: Copy Copilot Reconciliation Prompt** and paste it into GitHub Copilot CLI.
+4. Optionally run **Local PR Review: Copy Copilot Repository Instructions** and add the snippet to your repository instructions so future agents always read `.ai-review/active-feedback.md`.
+
+Agents should read `.ai-review/active-feedback.md`, answer question items, reconcile disputed items, and report results by hunk ID. Agents should not modify files under `.ai-review/`; only the extension should update review state.
 
 ## Architecture
 

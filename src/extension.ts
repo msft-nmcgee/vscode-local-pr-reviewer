@@ -14,6 +14,7 @@ import { ReviewFileDecorationProvider } from './decorations/fileDecorationProvid
 import { SuggestChangePanel } from './views/suggestChangePanel';
 import { ReviewDecision, ReviewHunkRecord } from './types';
 import { AiReviewStorageService, AiReviewSessionFile } from './storage/aiReviewStorageService';
+import { buildReconciliationPrompt, buildRepositoryInstructions } from './copilot/copilotPromptService';
 
 export async function activate(context: vscode.ExtensionContext) {
     const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
@@ -469,14 +470,23 @@ export async function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(
         vscode.commands.registerCommand('localPrReview.copyReconciliationPrompt', async () => {
             writeAiReviewArtifacts();
-            const prompt = [
-                'Read .ai-review/active-feedback.md and reconcile every disputed item.',
-                'For questions, provide a direct answer before making speculative changes.',
-                'Run the relevant tests, then report results by hunk ID.',
-                'Do not modify .ai-review files.',
-            ].join('\n');
-            await vscode.env.clipboard.writeText(prompt);
+            await vscode.env.clipboard.writeText(buildReconciliationPrompt());
             vscode.window.showInformationMessage('Copied Copilot reconciliation prompt.');
+        })
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand('localPrReview.copyRepositoryInstructions', async () => {
+            await vscode.env.clipboard.writeText(buildRepositoryInstructions());
+            vscode.window.showInformationMessage('Copied Copilot repository instructions.');
+        })
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand('localPrReview.openActiveFeedback', async () => {
+            writeAiReviewArtifacts();
+            const document = await vscode.workspace.openTextDocument(aiReviewStorageService.getActiveFeedbackPath());
+            await vscode.window.showTextDocument(document);
         })
     );
 

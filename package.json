@@ -182,6 +182,16 @@
         "icon": "$(copy)"
       },
       {
+        "command": "localPrReview.copyRepositoryInstructions",
+        "title": "Copy Copilot Repository Instructions",
+        "icon": "$(book)"
+      },
+      {
+        "command": "localPrReview.openActiveFeedback",
+        "title": "Open Active Feedback",
+        "icon": "$(go-to-file)"
+      },
+      {
         "command": "localPrReview.validateReview",
         "title": "Validate Review",
         "icon": "$(checklist)"
@@ -282,9 +292,14 @@
           "group": "navigation@5"
         },
         {
-          "command": "localPrReview.completeSession",
+          "command": "localPrReview.openActiveFeedback",
           "when": "view == localPrReview.changedFiles",
           "group": "navigation@6"
+        },
+        {
+          "command": "localPrReview.completeSession",
+          "when": "view == localPrReview.changedFiles",
+          "group": "navigation@7"
         },
         {
           "command": "localPrReview.refreshPrs",
@@ -384,7 +399,7 @@
   },
   "scripts": {
     "compile": "tsc -p ./",
-    "test": "npm run compile && node --test out/git/diffParser.test.js out/git/reviewIndexService.test.js out/storage/aiReviewStorageService.test.js",
+    "test": "npm run compile && node --test out/copilot/copilotPromptService.test.js out/git/diffParser.test.js out/git/reviewIndexService.test.js out/storage/aiReviewStorageService.test.js",
     "watch": "tsc -watch -p ./",
     "lint": "eslint src --ext ts"
   },
