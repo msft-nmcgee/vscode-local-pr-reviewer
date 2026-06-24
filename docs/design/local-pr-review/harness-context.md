@@ -8,8 +8,11 @@ Local PR Review can generate external harness artifacts under `.ai-review/` so a
 | --- | --- |
 | `.ai-review/harness-context.md` | Human/agent-readable Markdown summary of the review session, hunk structure, active reviewers, patches, human comments, and agentic reviewer outputs. |
 | `.ai-review/harness-manifest.json` | Tool-readable manifest with the same core data for external harnesses. |
+| `.ai-review/harness-agent.md` | Instructions for a CLI or external agent to reconcile reviewer outputs against hunk-linked code context. |
 
 Both files are generated review state. Do not edit them by hand; regenerate them from the extension.
+
+`harness-agent.md` is intended to be read by a CLI agent. It tells the agent which generated files to read, how to evaluate scaffolded reviewer comments, and how to report hunk-by-hunk reconciliation.
 
 ## Manifest shape
 

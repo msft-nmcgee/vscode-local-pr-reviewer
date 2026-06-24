@@ -44,6 +44,7 @@ export class AiReviewStorageService {
     private readonly activeFeedbackPath: string;
     private readonly harnessContextPath: string;
     private readonly harnessManifestPath: string;
+    private readonly harnessAgentPath: string;
 
     constructor(private readonly workspaceRoot: string) {
         this.aiReviewDir = path.join(workspaceRoot, '.ai-review');
@@ -53,6 +54,7 @@ export class AiReviewStorageService {
         this.activeFeedbackPath = path.join(this.aiReviewDir, 'active-feedback.md');
         this.harnessContextPath = path.join(this.aiReviewDir, 'harness-context.md');
         this.harnessManifestPath = path.join(this.aiReviewDir, 'harness-manifest.json');
+        this.harnessAgentPath = path.join(this.aiReviewDir, 'harness-agent.md');
     }
 
     getLedgerPath(): string {
@@ -69,6 +71,10 @@ export class AiReviewStorageService {
 
     getHarnessManifestPath(): string {
         return this.harnessManifestPath;
+    }
+
+    getHarnessAgentPath(): string {
+        return this.harnessAgentPath;
     }
 
     getSessionPath(reviewId: string): string {
@@ -115,9 +121,10 @@ export class AiReviewStorageService {
             .sort((left, right) => left.completedAt.localeCompare(right.completedAt));
     }
 
-    writeHarnessArtifacts(manifest: HarnessManifest, markdown: string): void {
+    writeHarnessArtifacts(manifest: HarnessManifest, markdown: string, agentInstructions: string): void {
         atomicWriteFile(this.harnessManifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
         atomicWriteFile(this.harnessContextPath, markdown);
+        atomicWriteFile(this.harnessAgentPath, agentInstructions);
     }
 
     renderActiveFeedback(input: ActiveFeedbackInput): string {

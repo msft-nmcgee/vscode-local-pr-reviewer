@@ -17,7 +17,7 @@ import { AiReviewStorageService, AiReviewSessionFile } from './storage/aiReviewS
 import { ReviewBoardConfigService } from './agents/reviewBoardConfigService';
 import { AgenticReviewService } from './agents/agenticReviewService';
 import { AgenticReviewScope } from './agents/agenticReviewPrompt';
-import { buildHarnessManifest, renderHarnessContext } from './harness/harnessContextService';
+import { buildHarnessManifest, renderHarnessAgentInstructions, renderHarnessContext } from './harness/harnessContextService';
 
 export async function activate(context: vscode.ExtensionContext) {
     const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
@@ -594,7 +594,7 @@ export async function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(
         vscode.commands.registerCommand('localPrReview.generateHarnessContext', () => {
             writeHarnessArtifacts();
-            vscode.window.showInformationMessage(`Generated ${aiReviewStorageService.getHarnessContextPath()} and ${aiReviewStorageService.getHarnessManifestPath()}.`);
+            vscode.window.showInformationMessage(`Generated harness context, manifest, and agent instructions under .ai-review.`);
         })
     );
 
@@ -735,7 +735,11 @@ export async function activate(context: vscode.ExtensionContext) {
             agents: reviewBoardConfigService.loadAgents(),
             agentReviewInvocations: aiReviewStorageService.loadAgenticReviewInvocations(),
         });
-        aiReviewStorageService.writeHarnessArtifacts(manifest, renderHarnessContext(manifest));
+        aiReviewStorageService.writeHarnessArtifacts(
+            manifest,
+            renderHarnessContext(manifest),
+            renderHarnessAgentInstructions()
+        );
     }
 
     function validateActiveReview(): string[] {

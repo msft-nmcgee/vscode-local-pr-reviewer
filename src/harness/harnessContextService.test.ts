@@ -1,6 +1,6 @@
 import * as assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { buildHarnessManifest, renderHarnessContext } from './harnessContextService';
+import { buildHarnessManifest, renderHarnessAgentInstructions, renderHarnessContext } from './harnessContextService';
 import { ReviewAgentDefinition, ReviewHunkRecord } from '../types';
 
 describe('harnessContextService', () => {
@@ -44,6 +44,15 @@ describe('harnessContextService', () => {
         assert.match(markdown, /sha256:abc/);
         assert.match(markdown, /```diff\n@@ -1 \+1 @@/);
         assert.match(markdown, /No concrete issue/);
+    });
+
+    it('renders CLI agent instructions for reconciling harness artifacts', () => {
+        const instructions = renderHarnessAgentInstructions();
+
+        assert.match(instructions, /AI Review Reconciliation Agent/);
+        assert.match(instructions, /\.ai-review\/harness-manifest\.json/);
+        assert.match(instructions, /Do not modify files under `.ai-review\/`/);
+        assert.match(instructions, /Hunk-by-hunk reconciliation/);
     });
 });
 
