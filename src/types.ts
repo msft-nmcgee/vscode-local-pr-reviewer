@@ -131,3 +131,33 @@ export interface CommitInfo {
     date: string;
     relativeDate: string;
 }
+
+export type ReviewAgentRole =
+    | 'security'
+    | 'performance'
+    | 'architecture'
+    | 'reliability'
+    | 'maintainability'
+    | 'testability'
+    | 'custom';
+
+export type ReviewFindingSeverity = 'critical' | 'high' | 'medium' | 'low' | 'info';
+
+export interface ReviewAgentBlockingPolicy {
+    critical?: boolean;
+    high?: boolean;
+    medium?: boolean;
+    low?: boolean;
+    info?: boolean;
+}
+
+export interface ReviewAgentDefinition {
+    id: string;
+    displayName: string;
+    role: ReviewAgentRole;
+    color: string;
+    enabled: boolean;
+    blocking: ReviewAgentBlockingPolicy;
+    prompt: string;
+    sourcePath?: string;
+}

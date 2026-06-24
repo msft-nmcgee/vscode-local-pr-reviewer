@@ -192,6 +192,16 @@
         "icon": "$(pass-filled)"
       },
       {
+        "command": "localPrReview.initializeReviewBoard",
+        "title": "Initialize Agentic Review Board",
+        "icon": "$(person-add)"
+      },
+      {
+        "command": "localPrReview.openReviewBoardConfig",
+        "title": "Open Agentic Review Board Config",
+        "icon": "$(settings-gear)"
+      },
+      {
         "command": "localPrReview.refreshFiles",
         "title": "Refresh Changed Files",
         "icon": "$(refresh)"
@@ -285,6 +295,16 @@
           "command": "localPrReview.completeSession",
           "when": "view == localPrReview.changedFiles",
           "group": "navigation@6"
+        },
+        {
+          "command": "localPrReview.initializeReviewBoard",
+          "when": "view == localPrReview.changedFiles",
+          "group": "navigation@7"
+        },
+        {
+          "command": "localPrReview.openReviewBoardConfig",
+          "when": "view == localPrReview.changedFiles",
+          "group": "navigation@8"
         },
         {
           "command": "localPrReview.refreshPrs",
@@ -383,8 +403,10 @@
     }
   },
   "scripts": {
+    "clean": "node -e \"require('fs').rmSync('out', { recursive: true, force: true })\"",
     "compile": "tsc -p ./",
-    "test": "npm run compile && node --test out/git/diffParser.test.js out/git/reviewIndexService.test.js out/storage/aiReviewStorageService.test.js",
+    "test": "npm run clean && npm run compile && node --test out/agents/reviewBoardConfigService.test.js out/git/diffParser.test.js out/git/reviewIndexService.test.js out/storage/aiReviewStorageService.test.js",
+    "vscode:prepublish": "npm run clean && npm run compile",
     "watch": "tsc -watch -p ./",
     "lint": "eslint src --ext ts"
   },

@@ -14,6 +14,7 @@ import { ReviewFileDecorationProvider } from './decorations/fileDecorationProvid
 import { SuggestChangePanel } from './views/suggestChangePanel';
 import { ReviewDecision, ReviewHunkRecord } from './types';
 import { AiReviewStorageService, AiReviewSessionFile } from './storage/aiReviewStorageService';
+import { ReviewBoardConfigService } from './agents/reviewBoardConfigService';
 
 export async function activate(context: vscode.ExtensionContext) {
     const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
@@ -29,6 +30,7 @@ export async function activate(context: vscode.ExtensionContext) {
     const localPrManager = new LocalPrManager(gitService, workspaceRoot);
     const storageService = new StorageService(localPrManager);
     const aiReviewStorageService = new AiReviewStorageService(workspaceRoot);
+    const reviewBoardConfigService = new ReviewBoardConfigService(workspaceRoot);
 
     // Register custom URI scheme for git file content
     const gitFileContentProvider = new GitFileContentProvider(gitService);
@@ -501,6 +503,51 @@ export async function activate(context: vscode.ExtensionContext) {
                 return;
             }
             vscode.window.showInformationMessage('Review session complete. No pending, disputed, or stale hunks remain.');
+        })
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand('localPrReview.initializeReviewBoard', async () => {
+            try {
+                const writtenPaths = reviewBoardConfigService.initializeDefaultAgents();
+                const agents = reviewBoardConfigService.loadAgents();
+                if (writtenPaths.length === 0) {
+                    vscode.window.showInformationMessage(`Agentic review board already configured with ${agents.length} reviewer(s).`);
+                    return;
+                }
+                vscode.window.showInformationMessage(`Initialized ${writtenPaths.length} agentic reviewer config file(s).`);
+            } catch (err: any) {
+                vscode.window.showErrorMessage(`Failed to initialize agentic review board: ${err.message}`);
+            }
+        })
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand('localPrReview.openReviewBoardConfig', async () => {
+            try {
+                const agents = reviewBoardConfigService.loadAgents();
+                if (agents.length === 0) {
+                    vscode.window.showWarningMessage('No agentic reviewers are configured.');
+                    return;
+                }
+                const selected = await vscode.window.showQuickPick(
+                    agents.map(agent => ({
+                        label: agent.displayName,
+                        description: agent.id,
+                        detail: `${agent.role} ${agent.enabled ? 'enabled' : 'disabled'}`,
+                        agent,
+                    })),
+                    { title: 'Open agentic reviewer configuration' }
+                );
+                if (!selected?.agent.sourcePath) {
+                    vscode.window.showInformationMessage('Run Initialize Agentic Review Board to create editable repo-local agent.md files.');
+                    return;
+                }
+                const document = await vscode.workspace.openTextDocument(selected.agent.sourcePath);
+                await vscode.window.showTextDocument(document);
+            } catch (err: any) {
+                vscode.window.showErrorMessage(`Failed to open agentic review board config: ${err.message}`);
+            }
         })
     );
 
